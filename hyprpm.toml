@@ -1,0 +1,13 @@
+[repository]
+name = "hyprfield"
+authors = ["zurat"]
+commit_pins = [["0.56.2", ""]]
+
+[hello]
+description = "A minimal Hyprland plugin example"
+authors = ["zurat"]
+output = "build/hello/hello.so"
+build = [
+    "cmake -S . -B build -DCMAKE_BUILD_TYPE=Release",
+    "cmake --build build --parallel",
+]
