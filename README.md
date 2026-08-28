@@ -46,7 +46,7 @@ The `hello` plugin displays a notification when it loads. Unload it with:
 just unload-hello
 ```
 
-The plugin also registers the `hello:hello` dispatcher and exposes `hl.plugin.hello.say(...)` for native Lua configuration. Add this keybind:
+The plugin exposes `hl.plugin.hello.say(...)` for native Lua configuration. Add this keybind:
 
 ```lua
 hl.bind("SUPER + H", function()
@@ -56,6 +56,12 @@ end, {
 })
 ```
 
-Pressing the key shows `Hello, Zurat!`. The dispatcher uses `world` when no name is supplied.
+Pressing the key shows `Hello, Zurat!`. The function uses `world` when no name is supplied.
+
+From the command line, use native Lua dispatch syntax:
+
+```sh
+hyprctl dispatch 'function() hl.plugin.hello.say("Zurat") end'
+```
 
 The same plugin can be built through `hyprpm` using the included `hyprpm.toml`.
