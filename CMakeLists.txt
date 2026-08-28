@@ -21,4 +21,10 @@ if(HYPRFIELD_USE_CCACHE)
     endif()
 endif()
 
+option(HYPRFIELD_NATIVE_OPTIMIZATIONS "Optimize Release builds for the build machine" ON)
+if(HYPRFIELD_NATIVE_OPTIMIZATIONS)
+    add_compile_options("$<$<CONFIG:Release>:-O3;-march=native;-mtune=native>")
+    message(STATUS "Using native Release optimizations")
+endif()
+
 add_subdirectory(hello)

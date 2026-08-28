@@ -2,7 +2,6 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 build-type := "Debug"
 build-dir := "build"
-plugin := build-dir / "hello" / "hello.so"
 
 default:
     @just --list
@@ -13,20 +12,31 @@ configure:
 build: configure
     cmake --build {{ build-dir }} --parallel
 
+release:
+    cmake -S . -B {{ build-dir }} -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+    cmake --build {{ build-dir }} --parallel
+
 format:
-    clang-format -i $(git ls-files --cached --others --exclude-standard '*.cpp' '*.hpp' '*.h')
+    clang-format --verbose -i $(git ls-files --cached --others --exclude-standard '*.cpp' '*.hpp' '*.h')
 
 format-check:
-    clang-format --dry-run --Werror $(git ls-files --cached --others --exclude-standard '*.cpp' '*.hpp' '*.h')
+    clang-format --verbose --dry-run --Werror $(git ls-files --cached --others --exclude-standard '*.cpp' '*.hpp' '*.h')
 
 tidy: configure
     clang-tidy -p {{ build-dir }} $(git ls-files --cached --others --exclude-standard '*.cpp' '*.hpp' '*.h')
 
 clean:
-    rm -rf {{ build-dir }}
+    if [[ -e "{{ build-dir }}" ]]; then trash "{{ build-dir }}"; fi
 
-load-hello: build
-    hyprctl plugin load "$PWD/{{ plugin }}"
+plugin-list:
+    hyprctl plugin list
 
-unload-hello:
-    hyprctl plugin unload "$PWD/{{ plugin }}"
+load plugin: build
+    hyprctl plugin load "$PWD/{{ build-dir }}/{{ plugin }}/{{ plugin }}.so"
+
+unload plugin:
+    hyprctl plugin unload "$PWD/{{ build-dir }}/{{ plugin }}/{{ plugin }}.so"
+
+reload plugin: build
+    hyprctl plugin unload "$PWD/{{ build-dir }}/{{ plugin }}/{{ plugin }}.so" || true
+    hyprctl plugin load "$PWD/{{ build-dir }}/{{ plugin }}/{{ plugin }}.so"
