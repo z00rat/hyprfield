@@ -3,6 +3,13 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#ifndef HYPRDIMENSION_OFFLINE
+#  include <Compositor.hpp>
+#  include <hyprland/src/event/EventBus.hpp>
+#  include <hyprland/src/render/Renderer.hpp>
+#  include <hyprland/src/state/MonitorState.hpp>
+#  include <render/pass/RectPassElement.hpp>
+#endif
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <map>
 #include <optional>
@@ -46,6 +53,44 @@ struct Board {
 };
 
 std::map<std::string, Board> boards;
+#ifndef HYPRDIMENSION_OFFLINE
+CHyprSignalListener renderListener;
+
+void renderCanvas(eRenderStage stage) {
+  if (stage != RENDER_POST_WALLPAPER || g_pHyprRenderer == nullptr || g_pCompositor == nullptr) {
+    return;
+  }
+  for (const auto& monitor : State::monitorState()->monitors()) {
+    const auto board = boards.find(monitor->m_name);
+    if (board == boards.end() || board->second.workspace.empty()) {
+      continue;
+    }
+    const auto& state = board->second;
+    const auto scale = monitor->m_scale;
+    const auto addRect = [monitor, scale](const Vector2D& position, const Vector2D& size, const CHyprColor& color) {
+      auto box = CBox{position, size};
+      box.scale(scale);
+      g_pHyprRenderer->m_renderPass.add(
+          makeUnique<CRectPassElement>(CRectPassElement::SRectData{.box = box, .color = color}));
+    };
+    addRect(Vector2D{0, 0}, monitor->m_size, {0.03F, 0.04F, 0.07F, 0.35F});
+    const auto cell_width = (monitor->m_size.x - 2 * state.margin - (state.columns - 1) * state.gap) / state.columns;
+    const auto cell_height = (monitor->m_size.y - 2 * state.margin - (state.rows - 1) * state.gap) / state.rows;
+    if (cell_width <= 0 || cell_height <= 0) {
+      continue;
+    }
+    for (int row = 0; row < state.rows; ++row) {
+      for (int column = 0; column < state.columns; ++column) {
+        const auto x = state.margin + column * (cell_width + state.gap) - state.camera_x;
+        const auto y = state.margin + row * (cell_height + state.gap) - state.camera_y;
+        addRect(Vector2D{x * state.zoom, y * state.zoom},
+                Vector2D{cell_width * state.zoom, cell_height * state.zoom},
+                {0.12F, 0.18F, 0.28F, 0.22F});
+      }
+    }
+  }
+}
+#endif
 
 std::optional<int> integer(std::string_view value) {
   try {
@@ -92,6 +137,13 @@ bool windowExists(std::string_view address) {
 
 void notify(const std::string& text) {
   HyprlandAPI::addNotification(pluginHandle, text, CHyprColor{0.2F, 0.6F, 1.0F, 1.0F}, 5000.0F);
+}
+
+void dispatch(const std::string& command) {
+  const auto result = HyprlandAPI::invokeHyprctlCommand("dispatch", command);
+  if (result.find("ok") == std::string::npos) {
+    notify("hyprdimension dispatch failed: " + (result.empty() ? "no response" : result));
+  }
 }
 
 std::filesystem::path statePath() {
@@ -200,7 +252,7 @@ int assignLua(lua_State* state) {
     return 0;
   }
   boardFor(fields[0]).workspace = fields[1];
-  HyprlandAPI::invokeHyprctlCommand("dispatch", "moveworkspacetomonitor " + fields[1] + " " + fields[0]);
+  dispatch("moveworkspacetomonitor " + fields[1] + " " + fields[0]);
   notify("hyprdimension assigned " + fields[1] + " to " + fields[0]);
   saveState();
   return 0;
@@ -260,14 +312,13 @@ int openLua(lua_State* state) {
   }
   board.windows[fields[1]] = placement;
   if (!board.workspace.empty()) {
-    HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace " + board.workspace + ",address:" + fields[1]);
+    dispatch("movetoworkspace " + board.workspace + ",address:" + fields[1]);
   }
   if (placement.floating) {
-    HyprlandAPI::invokeHyprctlCommand("dispatch", "togglefloating address:" + fields[1]);
+    dispatch("togglefloating address:" + fields[1]);
   }
-  HyprlandAPI::invokeHyprctlCommand("dispatch",
-                                    "movewindowpixel exact " + std::to_string(placement.column * 100) + " "
-                                        + std::to_string(placement.row * 100) + ",address:" + fields[1]);
+  dispatch("movewindowpixel exact " + std::to_string(placement.column * 100) + " " + std::to_string(placement.row * 100)
+           + ",address:" + fields[1]);
   notify("hyprdimension window opened " + fields[1]);
   saveState();
   return 0;
@@ -315,9 +366,8 @@ int placeLua(lua_State* state) {
     return 0;
   }
   board.windows[fields[1]] = candidate;
-  HyprlandAPI::invokeHyprctlCommand("dispatch",
-                                    "movewindowpixel exact " + std::to_string(candidate.column * 100) + " "
-                                        + std::to_string(candidate.row * 100) + ",address:" + fields[1]);
+  dispatch("movewindowpixel exact " + std::to_string(candidate.column * 100) + " " + std::to_string(candidate.row * 100)
+           + ",address:" + fields[1]);
   notify("hyprdimension window placed " + fields[1]);
   saveState();
   return 0;
@@ -344,7 +394,7 @@ int floatingLua(lua_State* state) {
     }
   }
   found->second.floating = !found->second.floating;
-  HyprlandAPI::invokeHyprctlCommand("dispatch", "togglefloating address:" + fields[1]);
+  dispatch("togglefloating address:" + fields[1]);
   notify("hyprdimension window " + fields[1] + (found->second.floating ? " floating" : " grid"));
   saveState();
   return 0;
@@ -405,7 +455,7 @@ int focusLua(lua_State* state) {
     return 0;
   }
   board.zoom = 1.0;
-  HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow address:" + fields[1]);
+  dispatch("focuswindow address:" + fields[1]);
   notify("hyprdimension focused " + fields[1]);
   saveState();
   return 0;
@@ -432,6 +482,11 @@ void initialize(HANDLE handle) {
   pluginHandle = handle;
   boards.clear();
   loadState();
+#ifndef HYPRDIMENSION_OFFLINE
+  if (g_pCompositor != nullptr && g_pCompositor->m_initialized && g_pHyprRenderer != nullptr) {
+    renderListener = Event::bus()->m_events.render.stage.listen(renderCanvas);
+  }
+#endif
   HyprlandAPI::addLuaFunction(handle, "hyprdimension", "assign", assignLua);
   HyprlandAPI::addLuaFunction(handle, "hyprdimension", "configure", configureLua);
   HyprlandAPI::addLuaFunction(handle, "hyprdimension", "open", openLua);
@@ -445,6 +500,9 @@ void initialize(HANDLE handle) {
 }
 
 void shutdown() {
+#ifndef HYPRDIMENSION_OFFLINE
+  renderListener.reset();
+#endif
   saveState();
   boards.clear();
   pluginHandle = nullptr;

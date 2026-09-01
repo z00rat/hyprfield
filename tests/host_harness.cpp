@@ -129,6 +129,9 @@ std::string HostHarness::invokeHyprctlCommand(const std::string& name,
   if (name == "clients" && format == "json") {
     return R"([{"address":"0x1000001"},{"address":"0x1000002"}])";
   }
+  if (name == "dispatch") {
+    return "ok";
+  }
   return format;
 }
 
