@@ -290,6 +290,14 @@ int floatingLua(lua_State* state) {
     notify("whiteboard window not found");
     return 0;
   }
+  if (found->second.floating) {
+    auto grid_placement = found->second;
+    grid_placement.floating = false;
+    if (!inBounds(board, grid_placement) || occupied(board, fields[1], grid_placement)) {
+      notify("whiteboard grid placement rejected");
+      return 0;
+    }
+  }
   found->second.floating = !found->second.floating;
   notify("whiteboard window " + fields[1] + (found->second.floating ? " floating" : " grid"));
   saveState();
@@ -309,7 +317,7 @@ int zoomLua(lua_State* state) {
     return 0;
   }
   const auto requested = std::clamp(*value, 0.25, 1.0);
-  board.zoom = requested < 0.9 ? 0.5 : requested;
+  board.zoom = board.zoom >= 1.0 && requested < 0.9 ? 0.5 : requested;
   notify("whiteboard " + fields[0] + (board.zoom < 1.0 ? " management" : " normal"));
   saveState();
   return 0;
