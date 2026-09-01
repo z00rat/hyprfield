@@ -38,6 +38,12 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(host.notifications().back().text == "whiteboard popup attached menu");
   host.unload();
   expect(!host.loaded());
+
+  hyprfield::testing::HostHarness restored;
+  expect(restored.loadPlugin(plugin_path, "0.1"));
+  invoke(restored, "focus", "DP-1 browser");
+  expect(restored.notifications().back().text == "whiteboard focused browser");
+  restored.unload();
 }
 
 }  // namespace

@@ -39,6 +39,7 @@ struct Board {
   double zoom = 1.0;
   int camera_x = 0;
   int camera_y = 0;
+  bool opening_floating = false;
   std::map<std::string, Placement> windows;
   std::map<std::string, std::string> popups;
 };
@@ -129,9 +130,6 @@ void saveState() {
       output << "window " << monitor << ' ' << id << ' ' << placement.row << ' ' << placement.column << ' '
              << placement.row_span << ' ' << placement.column_span << ' ' << placement.floating << '\n';
     }
-    for (const auto& [id, parent] : board.popups) {
-      output << "popup " << monitor << ' ' << id << ' ' << parent << '\n';
-    }
   }
 }
 
@@ -171,6 +169,12 @@ int assignLua(lua_State* state) {
     notify("whiteboard: assign requires <monitor> <workspace>");
     return 0;
   }
+  const auto already_assigned = std::ranges::any_of(
+      boards, [&fields](const auto& entry) { return entry.first != fields[0] && entry.second.workspace == fields[1]; });
+  if (already_assigned) {
+    notify("whiteboard workspace already assigned");
+    return 0;
+  }
   boardFor(fields[0]).workspace = fields[1];
   notify("whiteboard assigned " + fields[1] + " to " + fields[0]);
   saveState();
@@ -179,8 +183,8 @@ int assignLua(lua_State* state) {
 
 int configureLua(lua_State* state) {
   std::vector<std::string> fields;
-  if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 5) {
-    notify("whiteboard: configure requires <monitor> <rows> <columns> <gap> <margin>");
+  if (!parse(luaL_optstring(state, 1, ""), fields) || (fields.size() != 5 && fields.size() != 6)) {
+    notify("whiteboard: configure requires <monitor> <rows> <columns> <gap> <margin> [floating]");
     return 0;
   }
   auto& board = boardFor(fields[0]);
@@ -196,6 +200,11 @@ int configureLua(lua_State* state) {
   board.columns = *columns;
   board.gap = *gap;
   board.margin = *margin;
+  if (fields.size() == 6 && fields[5] != "grid" && fields[5] != "floating") {
+    notify("whiteboard grid configuration rejected");
+    return 0;
+  }
+  board.opening_floating = fields.size() == 6 && fields[5] == "floating";
   notify("whiteboard grid configured " + fields[0]);
   saveState();
   return 0;
@@ -210,8 +219,11 @@ int openLua(lua_State* state) {
   auto& board = boardFor(fields[0]);
   const auto slot = static_cast<int>(board.windows.size()) % std::max(1, board.columns);
   Placement placement{.row = static_cast<int>(board.windows.size()) / std::max(1, board.columns), .column = slot};
-  if (!inBounds(board, placement) || occupied(board, fields[1], placement)) {
+  if (board.opening_floating) {
     placement.floating = true;
+  } else if (!inBounds(board, placement) || occupied(board, fields[1], placement)) {
+    notify("whiteboard grid is full");
+    return 0;
   }
   board.windows[fields[1]] = placement;
   notify("whiteboard window opened " + fields[1]);
