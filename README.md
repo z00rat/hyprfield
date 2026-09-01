@@ -29,6 +29,7 @@ Add the repository and enable the plugin:
 ```sh
 hyprpm add https://github.com/z00rat/hyprfield
 hyprpm enable hello
+hyprpm enable hyprdimension
 ```
 
 After enabling it, reload your Hyprland configuration so the Lua API is available.
