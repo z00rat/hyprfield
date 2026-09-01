@@ -262,6 +262,12 @@ int openLua(lua_State* state) {
   if (!board.workspace.empty()) {
     HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace " + board.workspace + ",address:" + fields[1]);
   }
+  if (placement.floating) {
+    HyprlandAPI::invokeHyprctlCommand("dispatch", "togglefloating address:" + fields[1]);
+  }
+  HyprlandAPI::invokeHyprctlCommand("dispatch",
+                                    "movewindowpixel exact " + std::to_string(placement.column * 100) + " "
+                                        + std::to_string(placement.row * 100) + ",address:" + fields[1]);
   notify("hyprdimension window opened " + fields[1]);
   saveState();
   return 0;

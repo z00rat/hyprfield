@@ -36,7 +36,7 @@ void verify_hyprdimension(const std::string& plugin_path) {
   invoke(host, "open", "DP-1 0x1000003", "hyprdimension window does not exist");
   invoke(host, "open", "DP-1 0x1000001", "hyprdimension window opened 0x1000001");
   expect(host.commands().back().name == "dispatch");
-  expect(host.commands().back().arguments == "movetoworkspace 9,address:0x1000001");
+  expect(host.commands().back().arguments == "movewindowpixel exact 0 0,address:0x1000001");
   invoke(host, "place", "DP-1 0x1000001 0 0 1 1", "hyprdimension window placed 0x1000001");
   invoke(host, "open", "DP-1 0x1000002", "hyprdimension window opened 0x1000002");
   invoke(host, "place", "DP-1 0x1000002 0 1 1 1", "hyprdimension window placed 0x1000002");
