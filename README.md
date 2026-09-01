@@ -70,17 +70,38 @@ hyprctl dispatch 'function() hl.plugin.hello.say("Zurat") end'
 Load and exercise HyprDimension manually with:
 
 ```sh
+# Build the plugin and its offline tests.
 just build
-hyprctl plugin load "$PWD/build/hyprdimension/hyprdimension.so"
+
+# Find a real window address and print all candidates.
 WINDOW_ADDRESS=$(hyprctl clients -j | jq -r '.[0].address')
 hyprctl clients -j | jq -r '.[] | [.address, .monitor, .class, .title] | @tsv'
+
+# Load HyprDimension into the running compositor.
+hyprctl plugin load "$PWD/build/hyprdimension/hyprdimension.so"
+
+# Assign workspace 9 to monitor DP-1.
 hyprctl dispatch 'function() hl.plugin.hyprdimension.assign("DP-1 9") end'
+
+# Configure the default 2-by-4 grid, with 16px gaps and 32px margins.
 hyprctl dispatch 'function() hl.plugin.hyprdimension.configure("DP-1 2 4 16 32") end'
+
+# Add the real window to the canvas using its Hyprland address.
 hyprctl dispatch "function() hl.plugin.hyprdimension.open(\"DP-1 $WINDOW_ADDRESS\") end"
+
+# Enter management mode through the 0.9x threshold.
 hyprctl dispatch 'function() hl.plugin.hyprdimension.zoom("DP-1 0.8") end'
+
+# Move the monitor-scoped camera.
 hyprctl dispatch 'function() hl.plugin.hyprdimension.camera("DP-1 100 -40") end'
+
+# Confirm the plugin is loaded, then unload it cleanly.
 hyprctl plugin list
 hyprctl plugin unload "$PWD/build/hyprdimension/hyprdimension.so"
 ```
+
+`WINDOW_ADDRESS` contains the first window returned by `hyprctl clients -j`. Choose another address from the printed table if needed. The current plugin validates and stores that identity; live transformed rendering and compositor focus integration are still separate implementation work.
+
+The offline scenario in `tests/hyprdimension_test.cpp` follows the same lifecycle without contacting Hyprland. It covers two-monitor assignment, duplicate workspace rejection, invalid grid configuration, placeholder-ID rejection, placement, occupied-slot swapping, floating-layer toggling, management zoom, focus, camera movement, popup attachment, unload, and persistence restoration.
 
 See [plugin development](docs/plugin-development.md) for building this repository or adding plugins.

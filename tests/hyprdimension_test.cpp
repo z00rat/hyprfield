@@ -12,8 +12,12 @@ void expect(bool condition) {
   }
 }
 
-void invoke(hyprfield::testing::HostHarness& host, const char* name, const char* argument) {
+void invoke(hyprfield::testing::HostHarness& host,
+            const char* name,
+            const char* argument,
+            const char* expected_notification) {
   expect(host.invokeLua("hyprdimension", name, argument));
+  expect(host.notifications().back().text == expected_notification);
 }
 
 void verify_hyprdimension(const std::string& plugin_path) {
@@ -21,30 +25,30 @@ void verify_hyprdimension(const std::string& plugin_path) {
   hyprfield::testing::HostHarness host;
   expect(host.loadPlugin(plugin_path, "0.1"));
   expect(host.pluginName() == "hyprdimension");
-  invoke(host, "assign", "DP-1 9");
-  invoke(host, "configure", "DP-1 2 4 12 24");
-  invoke(host, "open", "DP-1 0x1000001");
-  invoke(host, "place", "DP-1 0x1000001 0 0 1 1");
-  invoke(host, "open", "DP-1 0x1000002");
-  invoke(host, "place", "DP-1 0x1000002 0 1 1 1");
-  invoke(host, "place", "DP-1 0x1000002 0 0 1 1");
-  invoke(host, "floating", "DP-1 0x1000002");
-  invoke(host, "zoom", "DP-1 0.8");
-  invoke(host, "focus", "DP-1 0x1000002");
-  invoke(host, "camera", "DP-1 100 -40");
-  invoke(host, "popup", "DP-1 menu 0x1000002");
-  expect(host.notifications().size() == 13);
-  expect(host.notifications()[1].text == "hyprdimension assigned 9 to DP-1");
-  expect(host.notifications()[7].text == "hyprdimension window placed 0x1000002");
-  expect(host.notifications()[9].text == "hyprdimension DP-1 management");
-  expect(host.notifications().back().text == "hyprdimension popup attached menu");
+  invoke(host, "assign", "DP-1 9", "hyprdimension assigned 9 to DP-1");
+  invoke(host, "assign", "DP-2 9", "hyprdimension workspace already assigned");
+  invoke(host, "assign", "DP-2 10", "hyprdimension assigned 10 to DP-2");
+  invoke(host, "configure", "DP-1 2 4 12 24", "hyprdimension grid configured DP-1");
+  invoke(host, "configure", "DP-2 0 4 12 24", "hyprdimension grid configuration rejected");
+  invoke(host, "open", "DP-1 terminal", "hyprdimension: open requires a Hyprland window address");
+  invoke(host, "open", "DP-1 0x1000001", "hyprdimension window opened 0x1000001");
+  invoke(host, "place", "DP-1 0x1000001 0 0 1 1", "hyprdimension window placed 0x1000001");
+  invoke(host, "open", "DP-1 0x1000002", "hyprdimension window opened 0x1000002");
+  invoke(host, "place", "DP-1 0x1000002 0 1 1 1", "hyprdimension window placed 0x1000002");
+  invoke(host, "place", "DP-1 0x1000002 0 0 1 1", "hyprdimension window placed 0x1000002");
+  invoke(host, "floating", "DP-1 0x1000002", "hyprdimension window 0x1000002 floating");
+  invoke(host, "floating", "DP-1 0x1000002", "hyprdimension window 0x1000002 grid");
+  invoke(host, "zoom", "DP-1 0.8", "hyprdimension DP-1 management");
+  invoke(host, "zoom", "DP-1 0.7", "hyprdimension DP-1 management");
+  invoke(host, "focus", "DP-1 0x1000002", "hyprdimension focused 0x1000002");
+  invoke(host, "camera", "DP-1 100 -40", "hyprdimension camera moved DP-1");
+  invoke(host, "popup", "DP-1 menu 0x1000002", "hyprdimension popup attached menu");
   host.unload();
   expect(!host.loaded());
 
   hyprfield::testing::HostHarness restored;
   expect(restored.loadPlugin(plugin_path, "0.1"));
-  invoke(restored, "focus", "DP-1 0x1000002");
-  expect(restored.notifications().back().text == "hyprdimension focused 0x1000002");
+  invoke(restored, "focus", "DP-1 0x1000002", "hyprdimension focused 0x1000002");
   restored.unload();
 }
 
