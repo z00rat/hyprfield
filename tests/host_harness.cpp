@@ -51,6 +51,12 @@ Log::CLogger::CLogger() : m_logger(), m_logsEnabled(true), m_isTrace(false) {}
 
 namespace HyprlandAPI {
 
+extern "C" std::string invokeHyprctlCommand(const std::string& name,
+                                            const std::string& arguments,
+                                            const std::string& format) {
+  return active_host->invokeHyprctlCommand(name, arguments, format);
+}
+
 extern "C" bool addLuaFunction(void* handle,
                                const std::string& namespace_,
                                const std::string& name,
@@ -116,6 +122,13 @@ void HostHarness::recordNotification(std::string_view text) {
   notifications_.push_back({.text = std::string{text}});
 }
 
+std::string HostHarness::invokeHyprctlCommand(const std::string& name,
+                                              const std::string& arguments,
+                                              const std::string& format) {
+  commands_.push_back({.name = name, .arguments = arguments});
+  return format;
+}
+
 bool HostHarness::invokeLua(std::string_view namespace_, std::string_view name, std::string_view argument) {
   const auto key = std::string{namespace_} + "." + std::string{name};
   const auto found = std::ranges::find_if(lua_functions_, [&key](const auto& entry) { return entry.first == key; });
@@ -141,6 +154,10 @@ const std::string& HostHarness::pluginName() const {
 
 const std::vector<Notification>& HostHarness::notifications() const {
   return notifications_;
+}
+
+const std::vector<Command>& HostHarness::commands() const {
+  return commands_;
 }
 
 }  // namespace hyprfield::testing

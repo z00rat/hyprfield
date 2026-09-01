@@ -26,6 +26,8 @@ void verify_hyprdimension(const std::string& plugin_path) {
   expect(host.loadPlugin(plugin_path, "0.1"));
   expect(host.pluginName() == "hyprdimension");
   invoke(host, "assign", "DP-1 9", "hyprdimension assigned 9 to DP-1");
+  expect(host.commands().back().name == "dispatch");
+  expect(host.commands().back().arguments == "moveworkspacetomonitor 9 DP-1");
   invoke(host, "assign", "DP-2 9", "hyprdimension workspace already assigned");
   invoke(host, "assign", "DP-2 10", "hyprdimension assigned 10 to DP-2");
   invoke(host, "configure", "DP-1 2 4 12 24", "hyprdimension grid configured DP-1");
@@ -41,6 +43,7 @@ void verify_hyprdimension(const std::string& plugin_path) {
   invoke(host, "zoom", "DP-1 0.8", "hyprdimension DP-1 management");
   invoke(host, "zoom", "DP-1 0.7", "hyprdimension DP-1 management");
   invoke(host, "focus", "DP-1 0x1000002", "hyprdimension focused 0x1000002");
+  expect(host.commands().back().arguments == "focuswindow address:0x1000002");
   invoke(host, "camera", "DP-1 100 -40", "hyprdimension camera moved DP-1");
   invoke(host, "popup", "DP-1 menu 0x1000002", "hyprdimension popup attached menu");
   host.unload();

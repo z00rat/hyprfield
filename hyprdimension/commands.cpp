@@ -186,6 +186,7 @@ int assignLua(lua_State* state) {
     return 0;
   }
   boardFor(fields[0]).workspace = fields[1];
+  HyprlandAPI::invokeHyprctlCommand("dispatch", "moveworkspacetomonitor " + fields[1] + " " + fields[0]);
   notify("hyprdimension assigned " + fields[1] + " to " + fields[0]);
   saveState();
   return 0;
@@ -373,6 +374,7 @@ int focusLua(lua_State* state) {
     return 0;
   }
   board.zoom = 1.0;
+  HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow address:" + fields[1]);
   notify("hyprdimension focused " + fields[1]);
   saveState();
   return 0;
