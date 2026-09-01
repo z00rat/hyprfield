@@ -33,6 +33,18 @@ hyprpm enable hello
 
 After enabling it, reload your Hyprland configuration so the Lua API is available.
 
+### HyprDimension
+
+HyprDimension exposes monitor-scoped workspace and canvas actions through native Lua:
+
+```lua
+hl.plugin.hyprdimension.assign("DP-1 9")
+hl.plugin.hyprdimension.configure("DP-1 2 4 16 32")
+hl.plugin.hyprdimension.open("DP-1 terminal")
+hl.plugin.hyprdimension.zoom("DP-1 0.8")
+hl.plugin.hyprdimension.camera("DP-1 100 -40")
+```
+
 ## Manual Testing
 
 For a locally built plugin, load it with:
@@ -52,6 +64,20 @@ Native Lua dispatch can also invoke the function directly:
 
 ```sh
 hyprctl dispatch 'function() hl.plugin.hello.say("Zurat") end'
+```
+
+Load and exercise HyprDimension manually with:
+
+```sh
+just build
+hyprctl plugin load "$PWD/build/hyprdimension/hyprdimension.so"
+hyprctl dispatch 'function() hl.plugin.hyprdimension.assign("DP-1 9") end'
+hyprctl dispatch 'function() hl.plugin.hyprdimension.configure("DP-1 2 4 16 32") end'
+hyprctl dispatch 'function() hl.plugin.hyprdimension.open("DP-1 terminal") end'
+hyprctl dispatch 'function() hl.plugin.hyprdimension.zoom("DP-1 0.8") end'
+hyprctl dispatch 'function() hl.plugin.hyprdimension.camera("DP-1 100 -40") end'
+hyprctl plugin list
+hyprctl plugin unload "$PWD/build/hyprdimension/hyprdimension.so"
 ```
 
 See [plugin development](docs/plugin-development.md) for building this repository or adding plugins.

@@ -1,7 +1,7 @@
 include_guard(GLOBAL)
 
 function(hyprfield_add_plugin plugin_name)
-    cmake_parse_arguments(PLUGIN "" "VERSION;DESCRIPTION;SOURCE" "" ${ARGN})
+    cmake_parse_arguments(PLUGIN "" "VERSION;DESCRIPTION" "SOURCE" ${ARGN})
 
     foreach(required VERSION DESCRIPTION SOURCE)
         if(NOT PLUGIN_${required})

@@ -18,7 +18,7 @@ extern "C" {
 #include <lua.h>
 }
 
-namespace {
+namespace hyprdimension {
 
 HANDLE pluginHandle = nullptr;
 
@@ -72,10 +72,10 @@ void notify(const std::string& text) {
 
 std::filesystem::path statePath() {
   if (const auto* state_home = std::getenv("XDG_STATE_HOME"); state_home != nullptr && *state_home != '\0') {
-    return std::filesystem::path{state_home} / "hyprfield" / "whiteboard.state";
+    return std::filesystem::path{state_home} / "hyprfield" / "hyprdimension.state";
   }
   if (const auto* home = std::getenv("HOME"); home != nullptr && *home != '\0') {
-    return std::filesystem::path{home} / ".local" / "state" / "hyprfield" / "whiteboard.state";
+    return std::filesystem::path{home} / ".local" / "state" / "hyprfield" / "hyprdimension.state";
   }
   return {};
 }
@@ -166,17 +166,17 @@ Board& boardFor(const std::string& monitor) {
 int assignLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 2) {
-    notify("whiteboard: assign requires <monitor> <workspace>");
+    notify("hyprdimension: assign requires <monitor> <workspace>");
     return 0;
   }
   const auto already_assigned = std::ranges::any_of(
       boards, [&fields](const auto& entry) { return entry.first != fields[0] && entry.second.workspace == fields[1]; });
   if (already_assigned) {
-    notify("whiteboard workspace already assigned");
+    notify("hyprdimension workspace already assigned");
     return 0;
   }
   boardFor(fields[0]).workspace = fields[1];
-  notify("whiteboard assigned " + fields[1] + " to " + fields[0]);
+  notify("hyprdimension assigned " + fields[1] + " to " + fields[0]);
   saveState();
   return 0;
 }
@@ -184,7 +184,7 @@ int assignLua(lua_State* state) {
 int configureLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || (fields.size() != 5 && fields.size() != 6)) {
-    notify("whiteboard: configure requires <monitor> <rows> <columns> <gap> <margin> [floating]");
+    notify("hyprdimension: configure requires <monitor> <rows> <columns> <gap> <margin> [floating]");
     return 0;
   }
   auto& board = boardFor(fields[0]);
@@ -193,7 +193,7 @@ int configureLua(lua_State* state) {
   const auto gap = integer(fields[3]);
   const auto margin = integer(fields[4]);
   if (!rows || !columns || !gap || !margin || *rows < 1 || *columns < 1 || *gap < 0 || *margin < 0) {
-    notify("whiteboard grid configuration rejected");
+    notify("hyprdimension grid configuration rejected");
     return 0;
   }
   board.rows = *rows;
@@ -201,11 +201,11 @@ int configureLua(lua_State* state) {
   board.gap = *gap;
   board.margin = *margin;
   if (fields.size() == 6 && fields[5] != "grid" && fields[5] != "floating") {
-    notify("whiteboard grid configuration rejected");
+    notify("hyprdimension grid configuration rejected");
     return 0;
   }
   board.opening_floating = fields.size() == 6 && fields[5] == "floating";
-  notify("whiteboard grid configured " + fields[0]);
+  notify("hyprdimension grid configured " + fields[0]);
   saveState();
   return 0;
 }
@@ -213,7 +213,7 @@ int configureLua(lua_State* state) {
 int openLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 2) {
-    notify("whiteboard: open requires <monitor> <window>");
+    notify("hyprdimension: open requires <monitor> <window>");
     return 0;
   }
   auto& board = boardFor(fields[0]);
@@ -222,11 +222,11 @@ int openLua(lua_State* state) {
   if (board.opening_floating) {
     placement.floating = true;
   } else if (!inBounds(board, placement) || occupied(board, fields[1], placement)) {
-    notify("whiteboard grid is full");
+    notify("hyprdimension grid is full");
     return 0;
   }
   board.windows[fields[1]] = placement;
-  notify("whiteboard window opened " + fields[1]);
+  notify("hyprdimension window opened " + fields[1]);
   saveState();
   return 0;
 }
@@ -234,14 +234,14 @@ int openLua(lua_State* state) {
 int placeLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || (fields.size() != 4 && fields.size() != 6)) {
-    notify("whiteboard: place requires <monitor> <window> <row> <column> [<row-span> <column-span>]");
+    notify("hyprdimension: place requires <monitor> <window> <row> <column> [<row-span> <column-span>]");
     return 0;
   }
   auto& board = boardFor(fields[0]);
   const auto row = integer(fields[2]);
   const auto column = integer(fields[3]);
   if (!row || !column) {
-    notify("whiteboard placement rejected");
+    notify("hyprdimension placement rejected");
     return 0;
   }
   Placement candidate{.row = *row, .column = *column};
@@ -249,14 +249,14 @@ int placeLua(lua_State* state) {
     const auto row_span = integer(fields[4]);
     const auto column_span = integer(fields[5]);
     if (!row_span || !column_span) {
-      notify("whiteboard placement rejected");
+      notify("hyprdimension placement rejected");
       return 0;
     }
     candidate.row_span = *row_span;
     candidate.column_span = *column_span;
   }
   if (!inBounds(board, candidate)) {
-    notify("whiteboard placement rejected");
+    notify("hyprdimension placement rejected");
     return 0;
   }
   auto current = board.windows.find(fields[1]);
@@ -269,11 +269,11 @@ int placeLua(lua_State* state) {
     std::swap(current->second.row, occupant->second.row);
     std::swap(current->second.column, occupant->second.column);
   } else if (occupied(board, fields[1], candidate)) {
-    notify("whiteboard placement rejected");
+    notify("hyprdimension placement rejected");
     return 0;
   }
   board.windows[fields[1]] = candidate;
-  notify("whiteboard window placed " + fields[1]);
+  notify("hyprdimension window placed " + fields[1]);
   saveState();
   return 0;
 }
@@ -281,25 +281,25 @@ int placeLua(lua_State* state) {
 int floatingLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 2) {
-    notify("whiteboard: floating requires <monitor> <window>");
+    notify("hyprdimension: floating requires <monitor> <window>");
     return 0;
   }
   auto& board = boardFor(fields[0]);
   auto found = board.windows.find(fields[1]);
   if (found == board.windows.end()) {
-    notify("whiteboard window not found");
+    notify("hyprdimension window not found");
     return 0;
   }
   if (found->second.floating) {
     auto grid_placement = found->second;
     grid_placement.floating = false;
     if (!inBounds(board, grid_placement) || occupied(board, fields[1], grid_placement)) {
-      notify("whiteboard grid placement rejected");
+      notify("hyprdimension grid placement rejected");
       return 0;
     }
   }
   found->second.floating = !found->second.floating;
-  notify("whiteboard window " + fields[1] + (found->second.floating ? " floating" : " grid"));
+  notify("hyprdimension window " + fields[1] + (found->second.floating ? " floating" : " grid"));
   saveState();
   return 0;
 }
@@ -307,18 +307,18 @@ int floatingLua(lua_State* state) {
 int zoomLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 2) {
-    notify("whiteboard: zoom requires <monitor> <value>");
+    notify("hyprdimension: zoom requires <monitor> <value>");
     return 0;
   }
   auto& board = boardFor(fields[0]);
   const auto value = decimal(fields[1]);
   if (!value) {
-    notify("whiteboard zoom rejected");
+    notify("hyprdimension zoom rejected");
     return 0;
   }
   const auto requested = std::clamp(*value, 0.25, 1.0);
   board.zoom = board.zoom >= 1.0 && requested < 0.9 ? 0.5 : requested;
-  notify("whiteboard " + fields[0] + (board.zoom < 1.0 ? " management" : " normal"));
+  notify("hyprdimension " + fields[0] + (board.zoom < 1.0 ? " management" : " normal"));
   saveState();
   return 0;
 }
@@ -326,19 +326,19 @@ int zoomLua(lua_State* state) {
 int cameraLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 3) {
-    notify("whiteboard: camera requires <monitor> <x> <y>");
+    notify("hyprdimension: camera requires <monitor> <x> <y>");
     return 0;
   }
   auto& board = boardFor(fields[0]);
   const auto x = integer(fields[1]);
   const auto y = integer(fields[2]);
   if (!x || !y) {
-    notify("whiteboard camera move rejected");
+    notify("hyprdimension camera move rejected");
     return 0;
   }
   board.camera_x = *x;
   board.camera_y = *y;
-  notify("whiteboard camera moved " + fields[0]);
+  notify("hyprdimension camera moved " + fields[0]);
   saveState();
   return 0;
 }
@@ -346,16 +346,16 @@ int cameraLua(lua_State* state) {
 int focusLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 2) {
-    notify("whiteboard: focus requires <monitor> <window>");
+    notify("hyprdimension: focus requires <monitor> <window>");
     return 0;
   }
   auto& board = boardFor(fields[0]);
   if (!board.windows.contains(fields[1])) {
-    notify("whiteboard window not found");
+    notify("hyprdimension window not found");
     return 0;
   }
   board.zoom = 1.0;
-  notify("whiteboard focused " + fields[1]);
+  notify("hyprdimension focused " + fields[1]);
   saveState();
   return 0;
 }
@@ -363,48 +363,40 @@ int focusLua(lua_State* state) {
 int popupLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 3) {
-    notify("whiteboard: popup requires <monitor> <popup> <parent>");
+    notify("hyprdimension: popup requires <monitor> <popup> <parent>");
     return 0;
   }
   auto& board = boardFor(fields[0]);
   if (!board.windows.contains(fields[2])) {
-    notify("whiteboard popup parent not found");
+    notify("hyprdimension popup parent not found");
     return 0;
   }
   board.popups[fields[1]] = fields[2];
-  notify("whiteboard popup attached " + fields[1]);
+  notify("hyprdimension popup attached " + fields[1]);
   saveState();
   return 0;
 }
 
-}  // namespace
-
-APICALL EXPORT std::string PLUGIN_API_VERSION() {
-  return HYPRLAND_API_VERSION;
-}
-
-APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
+void initialize(HANDLE handle) {
   pluginHandle = handle;
   boards.clear();
   loadState();
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "assign", assignLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "configure", configureLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "open", openLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "place", placeLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "floating", floatingLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "zoom", zoomLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "camera", cameraLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "focus", focusLua);
-  HyprlandAPI::addLuaFunction(handle, "whiteboard", "popup", popupLua);
-  notify("whiteboard plugin loaded");
-  return {.name = "whiteboard",
-          .description = "Monitor-scoped whiteboard workspaces",
-          .author = "zurat",
-          .version = "0.1.0"};
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "assign", assignLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "configure", configureLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "open", openLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "place", placeLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "floating", floatingLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "zoom", zoomLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "camera", cameraLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "focus", focusLua);
+  HyprlandAPI::addLuaFunction(handle, "hyprdimension", "popup", popupLua);
+  notify("hyprdimension plugin loaded");
 }
 
-APICALL EXPORT void PLUGIN_EXIT() {
+void shutdown() {
   saveState();
   boards.clear();
   pluginHandle = nullptr;
 }
+
+}  // namespace hyprdimension
