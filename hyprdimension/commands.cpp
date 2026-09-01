@@ -76,6 +76,20 @@ bool isWindowAddress(std::string_view value) {
   });
 }
 
+bool windowExists(std::string_view address) {
+  const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "-j", "json");
+  for (auto position = clients.find("\"address\""); position != std::string::npos;
+       position = clients.find("\"address\"", position + 1)) {
+    const auto colon = clients.find(':', position);
+    const auto quote = clients.find('"', colon);
+    if (colon != std::string::npos && quote != std::string::npos
+        && clients.compare(quote + 1, address.size(), address) == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void notify(const std::string& text) {
   HyprlandAPI::addNotification(pluginHandle, text, CHyprColor{0.2F, 0.6F, 1.0F, 1.0F}, 5000.0F);
 }
@@ -229,6 +243,10 @@ int openLua(lua_State* state) {
   }
   if (!isWindowAddress(fields[1])) {
     notify("hyprdimension: open requires a Hyprland window address");
+    return 0;
+  }
+  if (!windowExists(fields[1])) {
+    notify("hyprdimension window does not exist");
     return 0;
   }
   auto& board = boardFor(fields[0]);

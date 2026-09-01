@@ -33,7 +33,11 @@ void verify_hyprdimension(const std::string& plugin_path) {
   invoke(host, "configure", "DP-1 2 4 12 24", "hyprdimension grid configured DP-1");
   invoke(host, "configure", "DP-2 0 4 12 24", "hyprdimension grid configuration rejected");
   invoke(host, "open", "DP-1 terminal", "hyprdimension: open requires a Hyprland window address");
+  invoke(host, "open", "DP-1 0x1000003", "hyprdimension window does not exist");
   invoke(host, "open", "DP-1 0x1000001", "hyprdimension window opened 0x1000001");
+  expect(host.commands().back().name == "clients");
+  expect(host.commands().back().arguments == "-j");
+  expect(host.commands().back().format == "json");
   invoke(host, "place", "DP-1 0x1000001 0 0 1 1", "hyprdimension window placed 0x1000001");
   invoke(host, "open", "DP-1 0x1000002", "hyprdimension window opened 0x1000002");
   invoke(host, "place", "DP-1 0x1000002 0 1 1 1", "hyprdimension window placed 0x1000002");

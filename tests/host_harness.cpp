@@ -125,7 +125,10 @@ void HostHarness::recordNotification(std::string_view text) {
 std::string HostHarness::invokeHyprctlCommand(const std::string& name,
                                               const std::string& arguments,
                                               const std::string& format) {
-  commands_.push_back({.name = name, .arguments = arguments});
+  commands_.push_back({.name = name, .arguments = arguments, .format = format});
+  if (name == "clients" && format == "json") {
+    return R"([{"address":"0x1000001"},{"address":"0x1000002"}])";
+  }
   return format;
 }
 

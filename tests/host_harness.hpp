@@ -16,6 +16,7 @@ struct Notification {
 struct Command {
   std::string name;
   std::string arguments;
+  std::string format;
 };
 
 class HostHarness {
