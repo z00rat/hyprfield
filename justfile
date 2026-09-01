@@ -25,6 +25,10 @@ format-check:
 tidy: configure
     clang-tidy -p {{ build-dir }} $(git ls-files --cached --others --exclude-standard '*.cpp' '*.hpp' '*.h')
 
+compatibility-check:
+    cmake -S . -B {{ build-dir }} -DCMAKE_BUILD_TYPE=Debug -DHYPRFIELD_NATIVE_OPTIMIZATIONS=OFF -DBUILD_TESTING=OFF
+    cmake --build {{ build-dir }} --target hello --parallel
+
 clean:
     if [[ -e "{{ build-dir }}" ]]; then trash "{{ build-dir }}"; fi
 

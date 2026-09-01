@@ -3,6 +3,8 @@ name = "hyprfield"
 authors = ["zurat"]
 commit_pins = [["0.56.2", ""]]
 
+# Every plugin in this collection targets this exact Hyprland version.
+
 [hello]
 description = "A minimal Hyprland plugin example"
 authors = ["zurat"]

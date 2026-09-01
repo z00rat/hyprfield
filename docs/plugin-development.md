@@ -34,6 +34,16 @@ just tidy          # Run Clang-Tidy using the build compile database
 just clean         # Move build/ to the desktop trash
 ```
 
+## Compatibility
+
+The collection targets the exact Hyprland version in `hyprpm.toml`. CMake rejects
+any other installed version. Run `just compatibility-check` after changing the
+pin; do not publish a plugin until that check passes.
+
+The host harness is an offline CTest seam for lifecycle, Lua-facing API, and
+notification assertions. Run it with `ctest --test-dir build --output-on-failure`.
+It never contacts a running compositor.
+
 ## Add A Plugin
 
 Use lowercase kebab-case for the plugin name and keep the same name for its directory, CMake target, and shared library:

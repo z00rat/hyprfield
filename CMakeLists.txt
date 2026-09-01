@@ -5,6 +5,8 @@ project(hyprfield
     LANGUAGES CXX
 )
 
+include(cmake/HyprfieldPlugin.cmake)
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -27,4 +29,31 @@ if(HYPRFIELD_NATIVE_OPTIMIZATIONS)
     message(STATUS "Using native Release optimizations")
 endif()
 
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(HYPRLAND REQUIRED IMPORTED_TARGET hyprland)
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/hyprpm.toml" HYPRFIELD_PIN_LINE REGEX "^[ \\t]*commit_pins[ \\t]*=")
+list(LENGTH HYPRFIELD_PIN_LINE HYPRFIELD_PIN_LINE_COUNT)
+if(NOT HYPRFIELD_PIN_LINE_COUNT EQUAL 1)
+    message(FATAL_ERROR "hyprpm.toml must declare exactly one commit_pins entry")
+endif()
+string(REGEX MATCH "\"([0-9]+\\.[0-9]+\\.[0-9]+)\"" HYPRFIELD_PIN_MATCH "${HYPRFIELD_PIN_LINE}")
+set(HYPRFIELD_HYPRLAND_VERSION_PIN "${CMAKE_MATCH_1}")
+if(NOT HYPRFIELD_HYPRLAND_VERSION_PIN)
+    message(FATAL_ERROR "hyprpm.toml must declare one exact Hyprland version pin")
+endif()
+if(NOT HYPRLAND_VERSION VERSION_EQUAL HYPRFIELD_HYPRLAND_VERSION_PIN)
+    message(FATAL_ERROR
+        "Hyprland version ${HYPRLAND_VERSION} does not match exact pin ${HYPRFIELD_HYPRLAND_VERSION_PIN}. "
+        "Run 'just compatibility-check' before changing the pin.")
+endif()
+
 add_subdirectory(hello)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(host-harness-test tests/host_harness_test.cpp tests/host_harness.cpp)
+    target_compile_features(host-harness-test PRIVATE cxx_std_23)
+    target_link_libraries(host-harness-test PRIVATE PkgConfig::HYPRLAND ${CMAKE_DL_LIBS})
+    target_link_options(host-harness-test PRIVATE "-rdynamic")
+    add_test(NAME host-harness COMMAND host-harness-test "$<TARGET_FILE:hello>")
+endif()
