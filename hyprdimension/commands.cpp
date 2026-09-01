@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -64,6 +65,15 @@ std::optional<double> decimal(std::string_view value) {
   } catch (...) {
     return std::nullopt;
   }
+}
+
+bool isWindowAddress(std::string_view value) {
+  if (value.size() < 3 || value.substr(0, 2) != "0x") {
+    return false;
+  }
+  return std::all_of(value.begin() + 2, value.end(), [](const char character) {
+    return std::isxdigit(static_cast<unsigned char>(character)) != 0;
+  });
 }
 
 void notify(const std::string& text) {
@@ -216,6 +226,10 @@ int openLua(lua_State* state) {
     notify("hyprdimension: open requires <monitor> <window>");
     return 0;
   }
+  if (!isWindowAddress(fields[1])) {
+    notify("hyprdimension: open requires a Hyprland window address");
+    return 0;
+  }
   auto& board = boardFor(fields[0]);
   const auto slot = static_cast<int>(board.windows.size()) % std::max(1, board.columns);
   Placement placement{.row = static_cast<int>(board.windows.size()) / std::max(1, board.columns), .column = slot};
@@ -347,6 +361,10 @@ int focusLua(lua_State* state) {
   std::vector<std::string> fields;
   if (!parse(luaL_optstring(state, 1, ""), fields) || fields.size() != 2) {
     notify("hyprdimension: focus requires <monitor> <window>");
+    return 0;
+  }
+  if (!isWindowAddress(fields[1])) {
+    notify("hyprdimension: focus requires a Hyprland window address");
     return 0;
   }
   auto& board = boardFor(fields[0]);

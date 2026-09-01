@@ -41,7 +41,7 @@ HyprDimension exposes monitor-scoped workspace and canvas actions through native
 ```lua
 hl.plugin.hyprdimension.assign("DP-1 9")
 hl.plugin.hyprdimension.configure("DP-1 2 4 16 32")
-hl.plugin.hyprdimension.open("DP-1 terminal")
+hl.plugin.hyprdimension.open("DP-1 0x123456")
 hl.plugin.hyprdimension.zoom("DP-1 0.8")
 hl.plugin.hyprdimension.camera("DP-1 100 -40")
 ```
@@ -72,9 +72,11 @@ Load and exercise HyprDimension manually with:
 ```sh
 just build
 hyprctl plugin load "$PWD/build/hyprdimension/hyprdimension.so"
+WINDOW_ADDRESS=$(hyprctl clients -j | jq -r '.[0].address')
+hyprctl clients -j | jq -r '.[] | [.address, .monitor, .class, .title] | @tsv'
 hyprctl dispatch 'function() hl.plugin.hyprdimension.assign("DP-1 9") end'
 hyprctl dispatch 'function() hl.plugin.hyprdimension.configure("DP-1 2 4 16 32") end'
-hyprctl dispatch 'function() hl.plugin.hyprdimension.open("DP-1 terminal") end'
+hyprctl dispatch "function() hl.plugin.hyprdimension.open(\"DP-1 $WINDOW_ADDRESS\") end"
 hyprctl dispatch 'function() hl.plugin.hyprdimension.zoom("DP-1 0.8") end'
 hyprctl dispatch 'function() hl.plugin.hyprdimension.camera("DP-1 100 -40") end'
 hyprctl plugin list
