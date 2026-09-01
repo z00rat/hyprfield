@@ -259,6 +259,9 @@ int openLua(lua_State* state) {
     return 0;
   }
   board.windows[fields[1]] = placement;
+  if (!board.workspace.empty()) {
+    HyprlandAPI::invokeHyprctlCommand("dispatch", "movetoworkspace " + board.workspace + ",address:" + fields[1]);
+  }
   notify("hyprdimension window opened " + fields[1]);
   saveState();
   return 0;
@@ -306,6 +309,9 @@ int placeLua(lua_State* state) {
     return 0;
   }
   board.windows[fields[1]] = candidate;
+  HyprlandAPI::invokeHyprctlCommand("dispatch",
+                                    "movewindowpixel exact " + std::to_string(candidate.column * 100) + " "
+                                        + std::to_string(candidate.row * 100) + ",address:" + fields[1]);
   notify("hyprdimension window placed " + fields[1]);
   saveState();
   return 0;
@@ -332,6 +338,7 @@ int floatingLua(lua_State* state) {
     }
   }
   found->second.floating = !found->second.floating;
+  HyprlandAPI::invokeHyprctlCommand("dispatch", "togglefloating address:" + fields[1]);
   notify("hyprdimension window " + fields[1] + (found->second.floating ? " floating" : " grid"));
   saveState();
   return 0;
