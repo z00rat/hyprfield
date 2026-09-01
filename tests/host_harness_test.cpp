@@ -13,7 +13,7 @@ void expect(bool condition) {
 
 void verify_host_lifecycle(const std::string& plugin_path) {
   hyprfield::testing::HostHarness host;
-  expect(host.loadPlugin(plugin_path, "0.56.2"));
+  expect(host.loadPlugin(plugin_path, "0.1"));
   expect(host.loaded());
   expect(host.pluginName() == "hello");
   expect(host.notifications().size() == 1);

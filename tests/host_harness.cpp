@@ -1,12 +1,13 @@
 #include "host_harness.hpp"
 
 #include <dlfcn.h>
+extern "C" {
 #include <lauxlib.h>
 #include <lua.h>
+}
 
 #include <algorithm>
-#include <hyprland/src/helpers/Color.hpp>
-#include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/debug/log/Logger.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,14 +17,44 @@ namespace {
 
 hyprfield::testing::HostHarness* active_host = nullptr;
 
+using PluginDescription = struct {
+  std::string name;
+  std::string description;
+  std::string author;
+  std::string version;
+};
+
+using PluginApiVersion = std::string (*)();
+using PluginInit = PluginDescription (*)(void*);
+using PluginExit = void (*)();
+
+constexpr auto plugin_api_version_name = "pluginAPIVersion";
+constexpr auto plugin_init_name = "pluginInit";
+constexpr auto plugin_exit_name = "pluginExit";
+
 }  // namespace
+
+class CHyprColor {
+ public:
+  CHyprColor(float red, float green, float blue, float alpha) : r(red), g(green), b(blue), a(alpha) {}
+
+  float r;
+  float g;
+  float b;
+  float a;
+};
+
+extern "C" void colorConstructorStub() asm("_ZN10CHyprColorC1Effff");
+void colorConstructorStub() {}
+
+Log::CLogger::CLogger() : m_logger(), m_logsEnabled(true), m_isTrace(false) {}
 
 namespace HyprlandAPI {
 
 extern "C" bool addLuaFunction(void* handle,
                                const std::string& namespace_,
                                const std::string& name,
-                               PLUGIN_LUA_FN function) {
+                               int (*function)(lua_State*)) {
   static_cast<void>(handle);
   active_host->registerLuaFunction(namespace_, name, function);
   return true;
@@ -47,8 +78,8 @@ bool HostHarness::loadPlugin(const std::string& path, std::string_view expected_
     return false;
   }
 
-  const auto version = reinterpret_cast<PPLUGIN_API_VERSION_FUNC>(dlsym(library_, PLUGIN_API_VERSION_FUNC_STR));
-  const auto init = reinterpret_cast<PPLUGIN_INIT_FUNC>(dlsym(library_, PLUGIN_INIT_FUNC_STR));
+  const auto version = reinterpret_cast<PluginApiVersion>(dlsym(library_, plugin_api_version_name));
+  const auto init = reinterpret_cast<PluginInit>(dlsym(library_, plugin_init_name));
   if (version == nullptr || init == nullptr || version() != expected_version) {
     unload();
     return false;
@@ -57,7 +88,7 @@ bool HostHarness::loadPlugin(const std::string& path, std::string_view expected_
   active_host = this;
   const auto description = init(this);
   active_host = nullptr;
-  plugin_exit_ = reinterpret_cast<PPLUGIN_EXIT_FUNC>(dlsym(library_, PLUGIN_EXIT_FUNC_STR));
+  plugin_exit_ = reinterpret_cast<PluginExit>(dlsym(library_, plugin_exit_name));
   plugin_name_ = description.name;
   return true;
 }
@@ -93,7 +124,9 @@ bool HostHarness::invokeLua(std::string_view namespace_, std::string_view name, 
   }
   lua_State* state = luaL_newstate();
   lua_pushlstring(state, argument.data(), argument.size());
+  active_host = this;
   found->second(state);
+  active_host = nullptr;
   lua_close(state);
   return true;
 }
