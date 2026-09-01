@@ -4,6 +4,7 @@
 #include <fstream>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -43,6 +44,26 @@ struct Board {
 };
 
 std::map<std::string, Board> boards;
+
+std::optional<int> integer(std::string_view value) {
+  try {
+    std::size_t consumed = 0;
+    const auto result = std::stoi(std::string{value}, &consumed);
+    return consumed == value.size() ? std::optional{result} : std::nullopt;
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+std::optional<double> decimal(std::string_view value) {
+  try {
+    std::size_t consumed = 0;
+    const auto result = std::stod(std::string{value}, &consumed);
+    return consumed == value.size() ? std::optional{result} : std::nullopt;
+  } catch (...) {
+    return std::nullopt;
+  }
+}
 
 void notify(const std::string& text) {
   HyprlandAPI::addNotification(pluginHandle, text, CHyprColor{0.2F, 0.6F, 1.0F, 1.0F}, 5000.0F);
@@ -163,10 +184,18 @@ int configureLua(lua_State* state) {
     return 0;
   }
   auto& board = boardFor(fields[0]);
-  board.rows = std::stoi(fields[1]);
-  board.columns = std::stoi(fields[2]);
-  board.gap = std::stoi(fields[3]);
-  board.margin = std::stoi(fields[4]);
+  const auto rows = integer(fields[1]);
+  const auto columns = integer(fields[2]);
+  const auto gap = integer(fields[3]);
+  const auto margin = integer(fields[4]);
+  if (!rows || !columns || !gap || !margin || *rows < 1 || *columns < 1 || *gap < 0 || *margin < 0) {
+    notify("whiteboard grid configuration rejected");
+    return 0;
+  }
+  board.rows = *rows;
+  board.columns = *columns;
+  board.gap = *gap;
+  board.margin = *margin;
   notify("whiteboard grid configured " + fields[0]);
   saveState();
   return 0;
@@ -197,12 +226,37 @@ int placeLua(lua_State* state) {
     return 0;
   }
   auto& board = boardFor(fields[0]);
-  Placement candidate{.row = std::stoi(fields[2]), .column = std::stoi(fields[3])};
-  if (fields.size() == 6) {
-    candidate.row_span = std::stoi(fields[4]);
-    candidate.column_span = std::stoi(fields[5]);
+  const auto row = integer(fields[2]);
+  const auto column = integer(fields[3]);
+  if (!row || !column) {
+    notify("whiteboard placement rejected");
+    return 0;
   }
-  if (!inBounds(board, candidate) || occupied(board, fields[1], candidate)) {
+  Placement candidate{.row = *row, .column = *column};
+  if (fields.size() == 6) {
+    const auto row_span = integer(fields[4]);
+    const auto column_span = integer(fields[5]);
+    if (!row_span || !column_span) {
+      notify("whiteboard placement rejected");
+      return 0;
+    }
+    candidate.row_span = *row_span;
+    candidate.column_span = *column_span;
+  }
+  if (!inBounds(board, candidate)) {
+    notify("whiteboard placement rejected");
+    return 0;
+  }
+  auto current = board.windows.find(fields[1]);
+  auto occupant = std::ranges::find_if(board.windows, [&fields, &candidate](const auto& entry) {
+    return entry.first != fields[1] && !entry.second.floating && overlaps(entry.second, candidate);
+  });
+  if (current != board.windows.end() && occupant != board.windows.end() && candidate.row_span == 1
+      && candidate.column_span == 1 && current->second.row_span == 1 && current->second.column_span == 1
+      && occupant->second.row_span == 1 && occupant->second.column_span == 1) {
+    std::swap(current->second.row, occupant->second.row);
+    std::swap(current->second.column, occupant->second.column);
+  } else if (occupied(board, fields[1], candidate)) {
     notify("whiteboard placement rejected");
     return 0;
   }
@@ -237,7 +291,12 @@ int zoomLua(lua_State* state) {
     return 0;
   }
   auto& board = boardFor(fields[0]);
-  const auto requested = std::clamp(std::stod(fields[1]), 0.25, 1.0);
+  const auto value = decimal(fields[1]);
+  if (!value) {
+    notify("whiteboard zoom rejected");
+    return 0;
+  }
+  const auto requested = std::clamp(*value, 0.25, 1.0);
   board.zoom = requested < 0.9 ? 0.5 : requested;
   notify("whiteboard " + fields[0] + (board.zoom < 1.0 ? " management" : " normal"));
   saveState();
@@ -251,8 +310,14 @@ int cameraLua(lua_State* state) {
     return 0;
   }
   auto& board = boardFor(fields[0]);
-  board.camera_x = std::stoi(fields[1]);
-  board.camera_y = std::stoi(fields[2]);
+  const auto x = integer(fields[1]);
+  const auto y = integer(fields[2]);
+  if (!x || !y) {
+    notify("whiteboard camera move rejected");
+    return 0;
+  }
+  board.camera_x = *x;
+  board.camera_y = *y;
   notify("whiteboard camera moved " + fields[0]);
   saveState();
   return 0;
