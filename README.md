@@ -77,4 +77,6 @@ The command deliberately removes HyprDimension's saved state first; otherwise wi
 
 The offline scenario in `tests/hyprdimension_test.cpp` follows the same lifecycle without contacting Hyprland. It covers two-monitor assignment, duplicate workspace rejection, invalid grid configuration, placeholder-ID rejection, placement, occupied-slot swapping, floating-layer toggling, management zoom, focus, camera movement, popup attachment, unload, and persistence restoration.
 
+For a single-command live walkthrough, run `fish scripts/hyprdimension-demo.fish`. It discovers the first real client, pauses between each action, pans and zooms the canvas, toggles floating mode, restores `1.0x`, focuses the client, and unloads the plugin.
+
 See [plugin development](docs/plugin-development.md) for building this repository or adding plugins.
