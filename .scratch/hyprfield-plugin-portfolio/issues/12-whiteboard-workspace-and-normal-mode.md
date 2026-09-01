@@ -4,7 +4,7 @@
 
 **Blocked by:** 11 — Plugin Collection Foundation and Host Harness
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] A Whiteboard workspace can be assigned to one monitor without converting ordinary Hyprland workspaces.
 - [ ] Real application windows appear once on the canvas and receive ordinary keyboard and pointer interaction at 1x.
