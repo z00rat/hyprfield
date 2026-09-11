@@ -32,10 +32,15 @@ Standing preferences: preserve independent plugin loading, prefer native Lua-fac
 - [Monitor Color Control Scope](issues/09-monitor-color-scope.md) — build an independent plugin with a native Lua-facing per-monitor scalar brightness API; leave QuickShell consumption to a later client and exclude broader color effects and core changes.
 - [Portfolio Boundary And Sequence](issues/10-portfolio-boundary-and-sequence.md) — keep all five plugins in scope; implement Whiteboard first, Wallpaper second, then the three remaining plugins in any order, with optional integration and exact Hyprland pins managed through `hyprpm.toml`.
 
-## Not yet specified
+## Implementation map
 
-- The whiteboard's private-hook compatibility contract and persistence implementation details.
-- The layered submap API's complete declarative shape, reset/re-entry semantics, error handling, and compatibility expectations.
+- [Whiteboard Compatibility Gate](issues/12-whiteboard-compatibility-gate.md) — establish and verify the fail-closed renderer/input seam before product behavior.
+- [Whiteboard Host Activation](issues/13-whiteboard-workspace-activation.md) — verify monitor/workspace assignment and ordinary-workspace preservation.
+- [Whiteboard Workspace and Normal Mode](issues/14-whiteboard-workspace-and-normal-mode.md) — own board/client identity, lifecycle, persistence, and 1x behavior.
+- [Whiteboard Window Placement](issues/15-whiteboard-window-placement.md) — implement exclusive grid and explicit floating placement.
+- [Whiteboard Camera Rendering](issues/16-whiteboard-camera-rendering.md) — implement bounded transforms and restoration.
+- [Whiteboard Management Input](issues/17-whiteboard-management-input.md) — implement managed gestures and activation.
+- [Whiteboard End-to-End Integration](issues/18-whiteboard-end-to-end-integration.md) — verify the complete Whiteboard workflow and failure behavior.
 
 ## Out of scope
 

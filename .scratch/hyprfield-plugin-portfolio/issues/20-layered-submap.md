@@ -1,4 +1,4 @@
-# 15 — Layered Submap
+# 20 — Layered Submap
 
 **What to build:** Let users declare a nested layered submap through native Lua and navigate it using generated root, child, parent, sibling, and Escape transitions while retaining Hyprland's existing binding semantics and visible configuration failures.
 

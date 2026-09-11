@@ -1,4 +1,4 @@
-# 14 — Procedural Wallpaper
+# 19 — Procedural Wallpaper
 
 **What to build:** Let users configure and run an independently useful monitor-scoped procedural wallpaper whose deterministic chunked WFC generation, presentation, caching, and fallback remain bounded and strictly behind authoritative surfaces.
 

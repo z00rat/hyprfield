@@ -1,4 +1,4 @@
-# 17 — Per-Window Decoration
+# 22 — Per-Window Decoration
 
 **What to build:** Let users apply deterministic style-only decorations to tiled and floating application windows, with configurable title-bar and shadow presentation, per-window disablement and overrides, while Hyprland retains responsibility for input behavior.
 

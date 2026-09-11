@@ -1,4 +1,4 @@
-# 16 — Monitor Brightness Control
+# 21 — Monitor Brightness Control
 
 **What to build:** Let users set and persist an independent scalar brightness value for each monitor through native Lua, with explicit handling for invalid requests, monitor lifecycle changes, unsupported operations, and incompatible output-color ownership.
 
