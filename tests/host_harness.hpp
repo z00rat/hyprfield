@@ -15,6 +15,7 @@ struct Notification {
 };
 
 struct HostVersion {
+  std::string hash = "efb50993780079460b0cbed1363e2166a2de1d9f";
   std::string tag;
   std::string branch;
   bool dirty = false;

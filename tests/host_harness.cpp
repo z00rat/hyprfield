@@ -39,7 +39,7 @@ namespace HyprlandAPI {
 
 extern "C" SVersionInfo getHyprlandVersion(void* handle) {
   const auto version = static_cast<hyprfield::testing::HostHarness*>(handle)->hostVersion();
-  return {.tag = version.tag, .dirty = version.dirty, .branch = version.branch};
+  return {.hash = version.hash, .tag = version.tag, .dirty = version.dirty, .branch = version.branch};
 }
 
 extern "C" std::vector<SFunctionMatch> findFunctionsByName(void* handle, const std::string&) {

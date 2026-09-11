@@ -1,7 +1,7 @@
 [repository]
 name = "hyprfield"
 authors = ["zurat"]
-commit_pins = [["0.56.2", ""]]
+commit_pins = [["0.56.2", "efb50993780079460b0cbed1363e2166a2de1d9f"]]
 
 # Every plugin in this collection targets this exact Hyprland version.
 

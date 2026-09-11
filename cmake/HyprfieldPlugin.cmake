@@ -14,7 +14,8 @@ function(hyprfield_add_plugin plugin_name)
     target_link_libraries(${plugin_name} PRIVATE PkgConfig::HYPRLAND)
     if(HYPRFIELD_HYPRLAND_VERSION_PIN)
         target_compile_definitions(${plugin_name} PRIVATE
-            HYPRFIELD_HYPRLAND_VERSION_PIN="${HYPRFIELD_HYPRLAND_VERSION_PIN}")
+            HYPRFIELD_HYPRLAND_VERSION_PIN="${HYPRFIELD_HYPRLAND_VERSION_PIN}"
+            HYPRFIELD_HYPRLAND_COMMIT_PIN="${HYPRFIELD_HYPRLAND_COMMIT_PIN}")
     endif()
 
     set_target_properties(${plugin_name} PROPERTIES

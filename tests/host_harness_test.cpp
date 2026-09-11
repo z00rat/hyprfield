@@ -47,7 +47,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(unsupported.hookCount() == 0);
   expect(
       unsupported.notifications().back().text
-      == "[whiteboard] compatibility gate: host check failed: raw-tag=0.56.1, branch=, dirty=false, selected=0.56.1");
+      == "[whiteboard] compatibility gate: host check failed: raw-tag=0.56.1, branch=, hash=efb50993780079460b0cbed1363e2166a2de1d9f, dirty=false, selected=0.56.1");
 
   hyprfield::testing::HostHarness failed;
   failed.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
@@ -65,11 +65,11 @@ void verify_whiteboard(const std::string& plugin_path) {
          == "[whiteboard] compatibility gate: missing IElementRenderer::drawSurface");
 
   hyprfield::testing::HostHarness dirty;
-  dirty.setHostVersion("0.56.2", true);
+  dirty.setHostVersion("0.56.1", true);
   expect(!dirty.loadPlugin(plugin_path, "0.1"));
   expect(dirty.hookCount() == 0);
   expect(dirty.notifications().back().text
-         == "[whiteboard] compatibility gate: host check failed: raw-tag=0.56.2, branch=, dirty=true, selected=0.56.2");
+      == "[whiteboard] compatibility gate: host check failed: raw-tag=0.56.1, branch=, hash=efb50993780079460b0cbed1363e2166a2de1d9f, dirty=true, selected=0.56.1");
 }
 
 }  // namespace

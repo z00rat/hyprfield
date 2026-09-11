@@ -36,8 +36,8 @@ bool supportedHost() {
   auto tag = version.tag.empty() ? version.branch : version.tag;
   if (tag.starts_with('v'))
     tag.erase(0, 1);
-  if (tag != HYPRFIELD_HYPRLAND_VERSION_PIN || version.dirty) {
-    report("host check failed: raw-tag=" + version.tag + ", branch=" + version.branch
+  if (tag != HYPRFIELD_HYPRLAND_VERSION_PIN || version.hash != HYPRFIELD_HYPRLAND_COMMIT_PIN) {
+    report("host check failed: raw-tag=" + version.tag + ", branch=" + version.branch + ", hash=" + version.hash
            + ", dirty=" + std::string{version.dirty ? "true" : "false"} + ", selected=" + tag);
     return false;
   }
