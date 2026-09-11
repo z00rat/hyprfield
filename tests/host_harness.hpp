@@ -16,6 +16,7 @@ struct Notification {
 
 struct HostVersion {
   std::string tag;
+  std::string branch;
   bool dirty = false;
 };
 

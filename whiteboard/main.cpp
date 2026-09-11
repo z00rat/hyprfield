@@ -33,7 +33,7 @@ void report(std::string_view reason) {
 
 bool supportedHost() {
   const auto version = HyprlandAPI::getHyprlandVersion(pluginHandle);
-  auto tag = version.tag;
+  auto tag = version.tag.empty() ? version.branch : version.tag;
   if (tag.starts_with('v'))
     tag.erase(0, 1);
   if (tag != HYPRFIELD_HYPRLAND_VERSION_PIN || version.dirty) {
