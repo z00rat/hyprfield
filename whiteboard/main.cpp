@@ -145,6 +145,22 @@ bool jsonContainsClient(const std::string& json, std::string_view identity) {
   return json.contains("\"address\":\"" + std::string{identity} + "\"");
 }
 
+bool jsonClientBelongsToBoard(const std::string& json,
+                              std::string_view identity,
+                              std::string_view monitor,
+                              int workspace) {
+  const auto address = json.find("\"address\":\"" + std::string{identity} + "\"");
+  if (address == std::string::npos)
+    return false;
+  const auto objectStart = json.rfind('{', address);
+  const auto objectEnd = json.find('}', address);
+  if (objectStart == std::string::npos || objectEnd == std::string::npos)
+    return false;
+  const auto object = json.substr(objectStart, objectEnd - objectStart);
+  return object.contains("\"monitor\":\"" + std::string{monitor} + "\"")
+         && object.contains("\"workspace\":{\"id\":" + std::to_string(workspace));
+}
+
 int activateLua(lua_State* state) {
   size_t monitorLength = 0;
   const auto* monitorValue = lua_tolstring(state, 1, &monitorLength);
@@ -215,8 +231,11 @@ int registerClientLua(lua_State* state) {
 
   const std::string monitor{monitorValue, monitorLength};
   const std::string identity{identityValue, identityLength};
-  if (!jsonContainsClient(HyprlandAPI::invokeHyprctlCommand("clients", "-j"), identity))
+  const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "-j");
+  if (!jsonContainsClient(clients, identity))
     return activationFailure(state, "client identity was not found");
+  if (!jsonClientBelongsToBoard(clients, identity, monitor, static_cast<int>(workspace)))
+    return activationFailure(state, "client is not on the requested board");
   const auto board = findBoard(monitor, static_cast<int>(workspace));
   if (!board)
     return activationFailure(state, "client belongs to an inactive board");
@@ -326,7 +345,10 @@ void restore() {
         const auto workspace = std::stoi(line.substr(first + 1, second - first - 1));
         const auto board = activeBoards.find(workspace);
         if (board != activeBoards.end() && !line.substr(second + 1).empty()
-            && jsonContainsClient(HyprlandAPI::invokeHyprctlCommand("clients", "-j"), line.substr(second + 1)))
+            && jsonClientBelongsToBoard(HyprlandAPI::invokeHyprctlCommand("clients", "-j"),
+                                        line.substr(second + 1),
+                                        board->second.monitor,
+                                        workspace))
           board->second.clients.emplace(line.substr(second + 1), board->second.monitor);
       } catch (const std::exception&) {
         report("ignored invalid client persistence record");

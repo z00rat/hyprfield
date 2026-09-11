@@ -120,7 +120,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   hyprfield::testing::HostHarness model;
   model.setMonitor("DP-1");
   model.setWorkspace(42, "DP-1");
-  model.setClient("address:one");
+  model.setClient("address:one", 42, "DP-1");
   model.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
   model.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(model.loadPlugin(plugin_path, "0.1"));
@@ -143,7 +143,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   hyprfield::testing::HostHarness persisted;
   persisted.setMonitor("DP-1");
   persisted.setWorkspace(42, "DP-1");
-  persisted.setClient("address:persisted");
+  persisted.setClient("address:persisted", 42, "DP-1");
   persisted.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
   persisted.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(persisted.loadPlugin(plugin_path, "0.1"));
@@ -156,7 +156,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   hyprfield::testing::HostHarness restored;
   restored.setMonitor("DP-1");
   restored.setWorkspace(42, "DP-1");
-  restored.setClient("address:persisted");
+  restored.setClient("address:persisted", 42, "DP-1");
   restored.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
   restored.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(restored.loadPlugin(plugin_path, "0.1"));

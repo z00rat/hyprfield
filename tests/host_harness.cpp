@@ -150,8 +150,8 @@ void HostHarness::setWorkspace(int workspace, std::string_view monitor) {
   workspaces_.emplace_back(workspace, std::string{monitor});
 }
 
-void HostHarness::setClient(std::string_view identity) {
-  clients_.emplace_back(identity);
+void HostHarness::setClient(std::string_view identity, int workspace, std::string_view monitor) {
+  clients_.push_back({.identity = std::string{identity}, .workspace = workspace, .monitor = std::string{monitor}});
 }
 
 void HostHarness::setCommandResults(bool succeeds) {
@@ -265,7 +265,8 @@ std::string HostHarness::invokeHyprctl(std::string_view call, std::string_view a
     for (size_t index = 0; index < clients_.size(); ++index) {
       if (index != 0)
         result += ',';
-      result += "{\"address\":\"" + clients_[index] + "\"}";
+      result += "{\"address\":\"" + clients_[index].identity + "\",\"monitor\":\"" + clients_[index].monitor
+                + "\",\"workspace\":{\"id\":" + std::to_string(clients_[index].workspace) + "}}";
     }
     return result + ']';
   }
