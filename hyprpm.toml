@@ -15,7 +15,7 @@ build = [
 ]
 
 [whiteboard]
-description = "Whiteboard compatibility proof seam"
+description = "Monitor-assigned Whiteboard workspace model"
 authors = ["zurat"]
 output = "build/whiteboard/whiteboard.so"
 build = [

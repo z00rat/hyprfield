@@ -1,6 +1,7 @@
 #include "host_harness.hpp"
 
 #include <cstdlib>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -115,12 +116,60 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(invalid_workspace.loadPlugin(plugin_path, "0.1"));
   expect(!invalid_workspace.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "99"}));
   expect(invalid_workspace.notifications().back().text == "[whiteboard] activation failed: workspace 99 was not found");
+
+  hyprfield::testing::HostHarness model;
+  model.setMonitor("DP-1");
+  model.setWorkspace(42, "DP-1");
+  model.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  model.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
+  expect(model.loadPlugin(plugin_path, "0.1"));
+  expect(model.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
+  expect(model.invokeLua("whiteboard", "normal", std::vector<std::string>{"DP-1", "42"}));
+  expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
+  expect(model.invokeLua("whiteboard", "clientActive", "address:one"));
+  expect(!model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
+  expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "0.8"}));
+  expect(!model.invokeLua("whiteboard", "normal", std::vector<std::string>{"DP-1", "42"}));
+  expect(model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
+  expect(model.invokeLua("whiteboard", "closeClient", "address:one"));
+  expect(!model.invokeLua("whiteboard", "clientActive", "address:one"));
+  expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
+  expect(model.invokeLua("whiteboard", "deactivate", std::vector<std::string>{"DP-1", "42"}));
+  expect(!model.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
+  expect(!model.invokeLua("whiteboard", "clientActive", "address:one"));
+  model.unload();
+
+  hyprfield::testing::HostHarness persisted;
+  persisted.setMonitor("DP-1");
+  persisted.setWorkspace(42, "DP-1");
+  persisted.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  persisted.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
+  expect(persisted.loadPlugin(plugin_path, "0.1"));
+  expect(persisted.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
+  expect(
+      persisted.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:persisted"}));
+  expect(persisted.invokeLua("whiteboard", "save", std::vector<std::string>{}));
+  persisted.unload();
+
+  hyprfield::testing::HostHarness restored;
+  restored.setMonitor("DP-1");
+  restored.setWorkspace(42, "DP-1");
+  restored.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  restored.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
+  expect(restored.loadPlugin(plugin_path, "0.1"));
+  expect(restored.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
+  expect(restored.invokeLua("whiteboard", "clientActive", "address:persisted"));
+  restored.unload();
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
   expect(argc == 3);
+  const std::filesystem::path state = "/tmp/hyprfield-whiteboard-test-state";
+  std::filesystem::remove_all(state);
+  setenv("XDG_STATE_HOME", state.c_str(), 1);
   verify_host_lifecycle(argv[1]);
   verify_whiteboard(argv[2]);
+  std::filesystem::remove_all(state);
 }
