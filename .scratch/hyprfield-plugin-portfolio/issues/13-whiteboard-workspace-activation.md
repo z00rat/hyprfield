@@ -4,7 +4,7 @@
 
 **Blocked by:** 12 — Whiteboard Compatibility Gate
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Acceptance criteria
 
@@ -17,3 +17,10 @@
 ## Scope boundary
 
 Client placement, camera transforms, and management input belong to issues 15–17. This issue does not claim a visible canvas implementation beyond the compatibility proof in issue 12.
+
+## Comments
+
+- Implemented `hl.plugin.whiteboard.activate(monitor, workspace)` with monitor/workspace validation, `moveworkspacetomonitor` dispatch, post-action workspace verification, monitor-scoped active state, and fail-closed notifications.
+- Added `hl.plugin.whiteboard.active(monitor, workspace)` for observable lifecycle state; activation state and compatibility hooks are cleared on unload.
+- Extended the offline host harness to simulate compositor commands, record command results, invoke multi-argument Lua functions, and verify success, duplicate assignment, missing monitor/workspace, and command-failure paths.
+- Verified with `just format`, `just tidy`, a successful build, and the full CTest suite. Commit: `d27c989`.
