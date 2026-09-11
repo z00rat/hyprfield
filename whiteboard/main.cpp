@@ -21,8 +21,8 @@ constexpr std::string_view kInputMethod = "onMouseMoved";
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
 
-void rendererProofHook() {}
-void inputProofHook() {}
+void rendererProofHook(...) {}
+void inputProofHook(...) {}
 
 void report(std::string_view reason) {
   HyprlandAPI::addNotification(pluginHandle,
