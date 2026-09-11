@@ -40,6 +40,7 @@ class HostHarness {
   void setHookRegistration(bool succeeds);
   void setMonitor(std::string_view name);
   void setWorkspace(int workspace, std::string_view monitor);
+  void setClient(std::string_view identity);
   void setCommandResults(bool succeeds);
   void unload();
   void registerLuaFunction(std::string_view namespace_, std::string_view name, LuaFunction function);
@@ -74,6 +75,7 @@ class HostHarness {
   size_t active_hooks_ = 0;
   std::vector<std::string> monitors_;
   std::vector<std::pair<int, std::string>> workspaces_;
+  std::vector<std::string> clients_;
 };
 
 }  // namespace hyprfield::testing
