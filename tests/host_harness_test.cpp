@@ -31,7 +31,7 @@ void verify_host_lifecycle(const std::string& plugin_path) {
 void verify_whiteboard(const std::string& plugin_path) {
   hyprfield::testing::HostHarness host;
   host.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
-  host.setFunction("CInputManager::processMouseMove(Vector2D const&)");
+  host.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(host.loadPlugin(plugin_path, "0.1"));
   expect(host.hookCount() == 2);
   expect(host.notifications().back().text == "[whiteboard] compatibility proof ready");
@@ -50,7 +50,7 @@ void verify_whiteboard(const std::string& plugin_path) {
 
   hyprfield::testing::HostHarness failed;
   failed.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
-  failed.setFunction("CInputManager::processMouseMove(Vector2D const&)");
+  failed.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   failed.setHookRegistration(false);
   expect(!failed.loadPlugin(plugin_path, "0.1"));
   expect(failed.hookCount() == 0);

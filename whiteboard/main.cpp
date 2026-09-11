@@ -16,7 +16,7 @@ constexpr std::string_view kPluginName = "whiteboard";
 constexpr std::string_view kRenderClass = "IElementRenderer";
 constexpr std::string_view kRenderMethod = "drawSurface";
 constexpr std::string_view kInputClass = "CInputManager";
-constexpr std::string_view kInputMethod = "processMouseMove";
+constexpr std::string_view kInputMethod = "onMouseMoved";
 
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
