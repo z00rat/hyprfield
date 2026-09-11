@@ -49,6 +49,10 @@ extern "C" std::vector<SFunctionMatch> findFunctionsByName(void* handle, const s
   return result;
 }
 
+extern "C" std::string invokeHyprctlCommand(const std::string& call, const std::string& args, const std::string&) {
+  return active_host->invokeHyprctl(call, args);
+}
+
 extern "C" CFunctionHook* createFunctionHook(void* handle, const void*, const void*) {
   auto* host = static_cast<hyprfield::testing::HostHarness*>(handle);
   if (!host->hookRegistrationSucceeds())
@@ -138,6 +142,18 @@ void HostHarness::setHookRegistration(bool succeeds) {
   hook_registration_succeeds_ = succeeds;
 }
 
+void HostHarness::setMonitor(std::string_view name) {
+  monitors_.push_back(std::string{name});
+}
+
+void HostHarness::setWorkspace(int workspace, std::string_view monitor) {
+  workspaces_.emplace_back(workspace, std::string{monitor});
+}
+
+void HostHarness::setCommandResults(bool succeeds) {
+  command_results_succeed_ = succeeds;
+}
+
 void HostHarness::registerLuaFunction(std::string_view namespace_, std::string_view name, LuaFunction function) {
   lua_functions_.emplace_back(std::string{namespace_} + "." + std::string{name}, function);
 }
@@ -147,18 +163,27 @@ void HostHarness::recordNotification(std::string_view text) {
 }
 
 bool HostHarness::invokeLua(std::string_view namespace_, std::string_view name, std::string_view argument) {
+  return invokeLua(namespace_, name, std::vector<std::string>{std::string{argument}});
+}
+
+bool HostHarness::invokeLua(std::string_view namespace_,
+                            std::string_view name,
+                            const std::vector<std::string>& arguments) {
   const auto key = std::string{namespace_} + "." + std::string{name};
   const auto found = std::ranges::find_if(lua_functions_, [&key](const auto& entry) { return entry.first == key; });
   if (found == lua_functions_.end()) {
     return false;
   }
   lua_State* state = luaL_newstate();
-  lua_pushlstring(state, argument.data(), argument.size());
+  lua_pushcfunction(state, found->second);
+  for (const auto& argument : arguments)
+    lua_pushlstring(state, argument.data(), argument.size());
   active_host = this;
-  found->second(state);
+  const auto status = lua_pcall(state, static_cast<int>(arguments.size()), LUA_MULTRET, 0);
+  const auto result = status == LUA_OK && (lua_gettop(state) == 0 || lua_toboolean(state, -1) != 0);
   active_host = nullptr;
   lua_close(state);
-  return true;
+  return result;
 }
 
 bool HostHarness::loaded() const {
@@ -185,8 +210,54 @@ const std::vector<Function>& HostHarness::functions() const {
   return functions_;
 }
 
+const std::vector<Command>& HostHarness::commands() const {
+  return commands_;
+}
+
 bool HostHarness::hookRegistrationSucceeds() const {
   return hook_registration_succeeds_;
+}
+
+std::string HostHarness::invokeHyprctl(std::string_view call, std::string_view args) {
+  commands_.push_back({.call = std::string{call}, .args = std::string{args}});
+  if (!command_results_succeed_ && call == "dispatch")
+    return "error";
+  if (call == "dispatch") {
+    const auto separator = args.find(' ');
+    if (separator != std::string_view::npos && args.substr(0, separator) == "moveworkspacetomonitor") {
+      const auto workspace_separator = args.find(' ', separator + 1);
+      if (workspace_separator != std::string_view::npos) {
+        const auto workspace = std::stoi(std::string{args.substr(separator + 1, workspace_separator - separator - 1)});
+        const auto monitor = std::string{args.substr(workspace_separator + 1)};
+        for (auto& entry : workspaces_) {
+          if (entry.first == workspace)
+            entry.second = monitor;
+        }
+      }
+    }
+    return "ok";
+  }
+  if (call == "workspaces") {
+    std::string result = "[";
+    for (size_t index = 0; index < workspaces_.size(); ++index) {
+      if (index != 0)
+        result += ',';
+      result +=
+          "{\"id\":" + std::to_string(workspaces_[index].first) + ",\"monitor\":\"" + workspaces_[index].second + "\"}";
+    }
+    return result + ']';
+  }
+  if (call == "monitors") {
+    std::string result = "[";
+    for (size_t index = 0; index < monitors_.size(); ++index) {
+      if (index != 0)
+        result += ',';
+      result += "{\"name\":\"" + monitors_[index] + "\"}";
+    }
+    return result + ']';
+  }
+  static_cast<void>(args);
+  return "error";
 }
 
 void HostHarness::incrementActiveHook() {
