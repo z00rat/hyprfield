@@ -46,7 +46,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(!unsupported.loadPlugin(plugin_path, "0.1"));
   expect(unsupported.hookCount() == 0);
   expect(unsupported.notifications().back().text
-         == "[whiteboard] compatibility gate: unsupported or unverified host version");
+         == "[whiteboard] compatibility gate: unsupported or unverified host version (tag=0.56.1, dirty=false)");
 
   hyprfield::testing::HostHarness failed;
   failed.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
@@ -67,6 +67,8 @@ void verify_whiteboard(const std::string& plugin_path) {
   dirty.setHostVersion("0.56.2", true);
   expect(!dirty.loadPlugin(plugin_path, "0.1"));
   expect(dirty.hookCount() == 0);
+  expect(dirty.notifications().back().text
+         == "[whiteboard] compatibility gate: unsupported or unverified host version (tag=0.56.2, dirty=true)");
 }
 
 }  // namespace

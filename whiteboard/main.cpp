@@ -36,7 +36,12 @@ bool supportedHost() {
   auto tag = version.tag;
   if (tag.starts_with('v'))
     tag.erase(0, 1);
-  return tag == HYPRFIELD_HYPRLAND_VERSION_PIN && !version.dirty;
+  if (tag != HYPRFIELD_HYPRLAND_VERSION_PIN || version.dirty) {
+    report("unsupported or unverified host version (tag=" + version.tag
+           + ", dirty=" + std::string{version.dirty ? "true" : "false"} + ")");
+    return false;
+  }
+  return true;
 }
 
 CFunctionHook* installHook(std::string_view className, std::string_view methodName) {
@@ -83,7 +88,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     PLUGIN_EXIT();
   pluginHandle = handle;
   if (!supportedHost()) {
-    report("unsupported or unverified host version");
     pluginHandle = nullptr;
     return {};
   }
