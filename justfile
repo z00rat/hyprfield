@@ -46,7 +46,6 @@ reload plugin: build
     hyprctl plugin load "$PWD/{{ build-dir }}/{{ plugin }}/{{ plugin }}.so"
 
 verify-whiteboard: build
-    path="$PWD/{{ build-dir }}/whiteboard/whiteboard.so"
-    hyprctl plugin load "$path"
+    hyprctl plugin load "$PWD/{{ build-dir }}/whiteboard/whiteboard.so"
     hyprctl dispatch 'function() hl.plugin.whiteboard.proof("current") end'
-    hyprctl plugin unload "$path"
+    hyprctl plugin unload "$PWD/{{ build-dir }}/whiteboard/whiteboard.so"
