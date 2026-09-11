@@ -37,8 +37,8 @@ bool supportedHost() {
   if (tag.starts_with('v'))
     tag.erase(0, 1);
   if (tag != HYPRFIELD_HYPRLAND_VERSION_PIN || version.dirty) {
-    report("unsupported or unverified host version (tag=" + version.tag
-           + ", dirty=" + std::string{version.dirty ? "true" : "false"} + ")");
+    report("host check failed: raw-tag=" + version.tag + ", branch=" + version.branch
+           + ", dirty=" + std::string{version.dirty ? "true" : "false"} + ", selected=" + tag);
     return false;
   }
   return true;
