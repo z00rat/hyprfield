@@ -4,7 +4,7 @@
 
 **Blocked by:** 13 — Whiteboard Host Activation
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Acceptance criteria
 
@@ -23,3 +23,10 @@ Grid placement is implemented in issue 15. Camera transforms are implemented in 
 ## Current baseline
 
 The existing HyprDimension implementation is a partial command/state scaffold. Its dispatches, notifications, rectangle rendering, and offline tests do not satisfy these criteria; treat this issue as unimplemented until the observable behaviors above pass.
+
+## Comments
+
+- Implemented the monitor/workspace board model behind the public `hl.plugin.whiteboard` API with compositor-side workspace ownership validation and fail-closed rejection.
+- Added stable client identity registration, duplicate and stale-client rejection, explicit client close/deactivate cleanup, bounded normal/management zoom state, and separate persisted board metadata.
+- Extended the offline host harness to model client identity and persistence/reload behavior without contacting a running compositor.
+- Verified with `just format`, `just tidy`, a successful build, and the full CTest suite. Commits: `663b3d0` and `ddecb33`.
