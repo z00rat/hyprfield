@@ -144,6 +144,21 @@ void HostHarness::setHookRegistration(bool succeeds) {
 
 void HostHarness::setMonitor(std::string_view name) {
   monitors_.push_back(std::string{name});
+  monitor_geometry_.push_back({.name = std::string{name}});
+}
+
+void HostHarness::setMonitorGeometry(std::string_view name, int x, int y, int width, int height) {
+  const auto found =
+      std::ranges::find_if(monitor_geometry_, [name](const auto& monitor) { return monitor.name == name; });
+  if (found == monitor_geometry_.end()) {
+    monitor_geometry_.push_back({.name = std::string{name}, .x = x, .y = y, .width = width, .height = height});
+    monitors_.push_back(std::string{name});
+    return;
+  }
+  found->x = x;
+  found->y = y;
+  found->width = width;
+  found->height = height;
 }
 
 void HostHarness::setWorkspace(int workspace, std::string_view monitor) {
@@ -206,6 +221,10 @@ size_t HostHarness::hookCount() const {
   return active_hooks_;
 }
 
+const std::string& HostHarness::focusedClient() const {
+  return focused_client_;
+}
+
 HostVersion HostHarness::hostVersion() const {
   return host_version_;
 }
@@ -239,6 +258,19 @@ std::string HostHarness::invokeHyprctl(std::string_view call, std::string_view a
         }
       }
     }
+    if (args.starts_with("movetoworkspacesilent ")) {
+      const auto separator = args.find(',');
+      if (separator != std::string_view::npos) {
+        constexpr std::string_view prefix = "movetoworkspacesilent ";
+        const auto workspace = std::stoi(std::string{args.substr(prefix.size(), separator - prefix.size())});
+        const auto address = std::string{args.substr(separator + 1)};
+        for (auto& client : clients_)
+          if (client.identity == address)
+            client.workspace = workspace;
+      }
+    }
+    if (args.starts_with("focuswindow "))
+      focused_client_ = std::string{args.substr(std::string_view{"focuswindow "}.size())};
     return "ok";
   }
   if (call == "workspaces") {
@@ -256,7 +288,14 @@ std::string HostHarness::invokeHyprctl(std::string_view call, std::string_view a
     for (size_t index = 0; index < monitors_.size(); ++index) {
       if (index != 0)
         result += ',';
-      result += "{\"name\":\"" + monitors_[index] + "\"}";
+      const auto geometry = std::ranges::find_if(
+          monitor_geometry_, [this, index](const auto& monitor) { return monitor.name == monitors_[index]; });
+      const auto x = geometry == monitor_geometry_.end() ? 0 : geometry->x;
+      const auto y = geometry == monitor_geometry_.end() ? 0 : geometry->y;
+      const auto width = geometry == monitor_geometry_.end() ? 1920 : geometry->width;
+      const auto height = geometry == monitor_geometry_.end() ? 1080 : geometry->height;
+      result += "{\"name\":\"" + monitors_[index] + "\",\"x\":" + std::to_string(x) + ",\"y\":" + std::to_string(y)
+                + ",\"width\":" + std::to_string(width) + ",\"height\":" + std::to_string(height) + "}";
     }
     return result + ']';
   }

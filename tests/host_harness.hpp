@@ -39,6 +39,7 @@ class HostHarness {
   void setFunction(std::string_view demangled);
   void setHookRegistration(bool succeeds);
   void setMonitor(std::string_view name);
+  void setMonitorGeometry(std::string_view name, int x, int y, int width, int height);
   void setWorkspace(int workspace, std::string_view monitor);
   void setClient(std::string_view identity, int workspace, std::string_view monitor);
   void setCommandResults(bool succeeds);
@@ -56,6 +57,7 @@ class HostHarness {
   [[nodiscard]] HostVersion hostVersion() const;
   [[nodiscard]] const std::vector<Function>& functions() const;
   [[nodiscard]] const std::vector<Command>& commands() const;
+  [[nodiscard]] const std::string& focusedClient() const;
   [[nodiscard]] bool hookRegistrationSucceeds() const;
   [[nodiscard]] std::string invokeHyprctl(std::string_view call, std::string_view args);
   void incrementActiveHook();
@@ -74,6 +76,14 @@ class HostHarness {
   bool command_results_succeed_ = true;
   size_t active_hooks_ = 0;
   std::vector<std::string> monitors_;
+  struct Monitor {
+    std::string name;
+    int x = 0;
+    int y = 0;
+    int width = 1920;
+    int height = 1080;
+  };
+  std::vector<Monitor> monitor_geometry_;
   std::vector<std::pair<int, std::string>> workspaces_;
   struct Client {
     std::string identity;
@@ -81,6 +91,7 @@ class HostHarness {
     std::string monitor;
   };
   std::vector<Client> clients_;
+  std::string focused_client_;
 };
 
 }  // namespace hyprfield::testing

@@ -33,7 +33,26 @@ struct Board {
   std::string monitor;
   int workspace;
   float zoom = 1.0F;
-  std::unordered_map<std::string, std::string> clients;
+  struct Placement {
+    std::string layer = "grid";
+    int row = 0;
+    int column = 0;
+    int rowSpan = 1;
+    int columnSpan = 1;
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+  };
+  struct Grid {
+    int rows = 2;
+    int columns = 4;
+    int gap = 16;
+    int margin = 32;
+    std::string openingLayer = "grid";
+  };
+  Grid grid;
+  std::unordered_map<std::string, Placement> clients;
 };
 
 std::unordered_map<int, Board> activeBoards;
@@ -113,6 +132,82 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
   return found->second;
 }
 
+struct MonitorGeometry {
+  int x = 0;
+  int y = 0;
+  int width = 1920;
+  int height = 1080;
+};
+
+int jsonNumber(const std::string& json, std::string_view field, int fallback) {
+  const auto position = json.find("\"" + std::string{field} + "\":");
+  if (position == std::string::npos)
+    return fallback;
+  try {
+    return std::stoi(json.substr(position + field.size() + 3));
+  } catch (const std::exception&) {
+    return fallback;
+  }
+}
+
+MonitorGeometry monitorGeometry(std::string_view monitor) {
+  const auto json = HyprlandAPI::invokeHyprctlCommand("monitors", "-j");
+  const auto name = json.find("\"name\":\"" + std::string{monitor} + "\"");
+  if (name == std::string::npos)
+    return {};
+  const auto object = json.substr(name, json.find('}', name) - name);
+  return {.x = jsonNumber(object, "x", 0),
+          .y = jsonNumber(object, "y", 0),
+          .width = jsonNumber(object, "width", 1920),
+          .height = jsonNumber(object, "height", 1080)};
+}
+
+bool occupies(const Board::Placement& placement, int row, int column) {
+  return row >= placement.row && row < placement.row + placement.rowSpan && column >= placement.column
+         && column < placement.column + placement.columnSpan;
+}
+
+bool freeSlots(const Board& board, std::string_view except, int row, int column, int rowSpan, int columnSpan) {
+  for (const auto& [identity, placement] : board.clients) {
+    if (identity == except || placement.layer != "grid")
+      continue;
+    for (int claimedRow = row; claimedRow < row + rowSpan; ++claimedRow)
+      for (int claimedColumn = column; claimedColumn < column + columnSpan; ++claimedColumn)
+        if (occupies(placement, claimedRow, claimedColumn))
+          return false;
+  }
+  return true;
+}
+
+void setGeometry(Board& board, Board::Placement& placement, std::string_view monitor) {
+  const auto geometry = monitorGeometry(monitor);
+  const auto usableWidth = geometry.width - board.grid.margin * 2 - board.grid.gap * (board.grid.columns - 1);
+  const auto usableHeight = geometry.height - board.grid.margin * 2 - board.grid.gap * (board.grid.rows - 1);
+  const auto slotWidth = usableWidth / board.grid.columns;
+  const auto slotHeight = usableHeight / board.grid.rows;
+  placement.x = geometry.x + board.grid.margin + placement.column * (slotWidth + board.grid.gap);
+  placement.y = geometry.y + board.grid.margin + placement.row * (slotHeight + board.grid.gap);
+  placement.width = slotWidth * placement.columnSpan + board.grid.gap * (placement.columnSpan - 1);
+  placement.height = slotHeight * placement.rowSpan + board.grid.gap * (placement.rowSpan - 1);
+}
+
+bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
+  const auto move = HyprlandAPI::invokeHyprctlCommand("dispatch",
+                                                      "movewindowpixel exact " + std::to_string(placement.x) + " "
+                                                          + std::to_string(placement.y) + "," + std::string{identity});
+  if (!move.starts_with("ok"))
+    return false;
+  const auto resize =
+      HyprlandAPI::invokeHyprctlCommand("dispatch",
+                                        "resizewindowpixel exact " + std::to_string(placement.width) + " "
+                                            + std::to_string(placement.height) + "," + std::string{identity});
+  return resize.starts_with("ok");
+}
+
+int placementFailure(lua_State* state, std::string_view reason) {
+  return activationFailure(state, reason);
+}
+
 bool jsonContainsMonitor(const std::string& json, std::string_view monitor) {
   return json.contains("\"name\":\"" + std::string{monitor} + "\"");
 }
@@ -141,8 +236,31 @@ bool jsonContainsWorkspace(const std::string& json, int workspace) {
   return json.contains("\"id\":" + std::to_string(workspace));
 }
 
+void pruneLostBoards() {
+  const auto monitors = HyprlandAPI::invokeHyprctlCommand("monitors", "-j");
+  const auto workspaces = HyprlandAPI::invokeHyprctlCommand("workspaces", "-j");
+  for (auto iterator = activeBoards.begin(); iterator != activeBoards.end();) {
+    if (jsonContainsMonitor(monitors, iterator->second.monitor)
+        && jsonContainsWorkspace(workspaces, iterator->second.workspace, iterator->second.monitor))
+      ++iterator;
+    else
+      iterator = activeBoards.erase(iterator);
+  }
+}
+
 bool jsonContainsClient(const std::string& json, std::string_view identity) {
   return json.contains("\"address\":\"" + std::string{identity} + "\"");
+}
+
+void pruneStaleClients() {
+  const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "-j");
+  for (auto& [_, board] : activeBoards)
+    for (auto iterator = board.clients.begin(); iterator != board.clients.end();) {
+      if (jsonContainsClient(clients, iterator->first))
+        ++iterator;
+      else
+        iterator = board.clients.erase(iterator);
+    }
 }
 
 bool jsonClientBelongsToBoard(const std::string& json,
@@ -219,6 +337,8 @@ int activeLua(lua_State* state) {
 }
 
 int registerClientLua(lua_State* state) {
+  pruneLostBoards();
+  pruneStaleClients();
   size_t monitorLength = 0;
   const auto* monitorValue = lua_tolstring(state, 1, &monitorLength);
   int isWorkspace = 0;
@@ -234,8 +354,6 @@ int registerClientLua(lua_State* state) {
   const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "-j");
   if (!jsonContainsClient(clients, identity))
     return activationFailure(state, "client identity was not found");
-  if (!jsonClientBelongsToBoard(clients, identity, monitor, static_cast<int>(workspace)))
-    return activationFailure(state, "client is not on the requested board");
   const auto board = findBoard(monitor, static_cast<int>(workspace));
   if (!board)
     return activationFailure(state, "client belongs to an inactive board");
@@ -243,12 +361,44 @@ int registerClientLua(lua_State* state) {
       activeBoards, [&identity](const auto& entry) { return entry.second.clients.contains(identity); });
   if (alreadyRegistered)
     return activationFailure(state, "client identity is already registered");
-  board->get().clients.emplace(identity, monitor);
+  const auto clientOnBoard = jsonClientBelongsToBoard(clients, identity, monitor, static_cast<int>(workspace));
+  if (!clientOnBoard) {
+    const auto dispatch = HyprlandAPI::invokeHyprctlCommand(
+        "dispatch", "movetoworkspacesilent " + std::to_string(workspace) + "," + identity);
+    if (!dispatch.starts_with("ok"))
+      return activationFailure(state, "failed to move client to board");
+    if (!jsonClientBelongsToBoard(
+            HyprlandAPI::invokeHyprctlCommand("clients", "-j"), identity, monitor, static_cast<int>(workspace)))
+      return activationFailure(state, "client workspace verification failed");
+  }
+  auto& record = board->get().clients[identity];
+  record.layer = board->get().grid.openingLayer;
+  if (record.layer == "grid") {
+    bool placed = false;
+    for (int row = 0; row < board->get().grid.rows && !placed; ++row)
+      for (int column = 0; column < board->get().grid.columns && !placed; ++column)
+        if (freeSlots(board->get(), identity, row, column, 1, 1)) {
+          record.row = row;
+          record.column = column;
+          setGeometry(board->get(), record, monitor);
+          if (!dispatchGeometry(identity, record)) {
+            board->get().clients.erase(identity);
+            return activationFailure(state, "client geometry dispatch failed");
+          }
+          placed = true;
+        }
+    if (!placed) {
+      board->get().clients.erase(identity);
+      return activationFailure(state, "no free grid slot");
+    }
+  }
   lua_pushboolean(state, true);
   return 1;
 }
 
 int clientActiveLua(lua_State* state) {
+  pruneLostBoards();
+  pruneStaleClients();
   size_t identityLength = 0;
   const auto* identityValue = lua_tolstring(state, 1, &identityLength);
   bool active = identityValue != nullptr && identityLength != 0;
@@ -274,6 +424,222 @@ int closeClientLua(lua_State* state) {
     }
   }
   return activationFailure(state, "client identity was not registered");
+}
+
+int configureGridLua(lua_State* state) {
+  size_t monitorLength = 0;
+  const auto* monitorValue = lua_tolstring(state, 1, &monitorLength);
+  int workspaceOk = 0;
+  const auto workspace = lua_tointegerx(state, 2, &workspaceOk);
+  int rowsOk = 0;
+  const auto rows = lua_tointegerx(state, 3, &rowsOk);
+  int columnsOk = 0;
+  const auto columns = lua_tointegerx(state, 4, &columnsOk);
+  int gapOk = 0;
+  const auto gap = lua_tointegerx(state, 5, &gapOk);
+  int marginOk = 0;
+  const auto margin = lua_tointegerx(state, 6, &marginOk);
+  const auto layer = luaL_optstring(state, 7, "grid");
+  if (monitorValue == nullptr || monitorLength == 0 || !workspaceOk || workspace <= 0 || !rowsOk || rows <= 0
+      || !columnsOk || columns <= 0 || !gapOk || gap < 0 || !marginOk || margin < 0
+      || (std::string_view{layer} != "grid" && std::string_view{layer} != "floating"))
+    return placementFailure(state, "invalid grid configuration");
+  const auto board = findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
+  if (!board)
+    return placementFailure(state, "board is not active");
+  if (margin * 2 + gap * (columns - 1) >= monitorGeometry(monitorValue).width
+      || margin * 2 + gap * (rows - 1) >= monitorGeometry(monitorValue).height)
+    return placementFailure(state, "grid configuration does not fit monitor");
+  for (const auto& [_, placement] : board->get().clients)
+    if (placement.layer == "grid"
+        && (placement.row + placement.rowSpan > rows || placement.column + placement.columnSpan > columns))
+      return placementFailure(state, "grid configuration would invalidate placement");
+  auto& grid = board->get().grid;
+  const auto previousGrid = grid;
+  grid = {.rows = static_cast<int>(rows),
+          .columns = static_cast<int>(columns),
+          .gap = static_cast<int>(gap),
+          .margin = static_cast<int>(margin),
+          .openingLayer = layer};
+  for (auto& [identity, placement] : board->get().clients)
+    if (placement.layer == "grid") {
+      setGeometry(board->get(), placement, std::string_view{monitorValue, monitorLength});
+      if (!dispatchGeometry(identity, placement)) {
+        grid = previousGrid;
+        return placementFailure(state, "client geometry dispatch failed");
+      }
+    }
+  lua_pushboolean(state, true);
+  return 1;
+}
+
+int placeGridLua(lua_State* state) {
+  size_t monitorLength = 0;
+  const auto* monitorValue = lua_tolstring(state, 1, &monitorLength);
+  int workspaceOk = 0;
+  const auto workspace = lua_tointegerx(state, 2, &workspaceOk);
+  size_t identityLength = 0;
+  const auto* identityValue = lua_tolstring(state, 3, &identityLength);
+  int rowOk = 0;
+  const auto row = lua_tointegerx(state, 4, &rowOk);
+  int columnOk = 0;
+  const auto column = lua_tointegerx(state, 5, &columnOk);
+  int rowSpanOk = 0;
+  const auto rowSpan = lua_tointegerx(state, 6, &rowSpanOk);
+  int columnSpanOk = 0;
+  const auto columnSpan = lua_tointegerx(state, 7, &columnSpanOk);
+  if (monitorValue == nullptr || monitorLength == 0 || !workspaceOk || workspace <= 0 || identityValue == nullptr
+      || identityLength == 0 || !rowOk || !columnOk || !rowSpanOk || !columnSpanOk || row < 0 || column < 0
+      || rowSpan <= 0 || columnSpan <= 0)
+    return placementFailure(state, "invalid grid placement");
+  const std::string monitor{monitorValue, monitorLength};
+  const std::string identity{identityValue, identityLength};
+  const auto board = findBoard(monitor, static_cast<int>(workspace));
+  if (!board)
+    return placementFailure(state, "board is not active");
+  auto found = board->get().clients.find(identity);
+  if (found == board->get().clients.end())
+    return placementFailure(state, "client identity was not registered");
+  if (row + rowSpan > board->get().grid.rows || column + columnSpan > board->get().grid.columns)
+    return placementFailure(state, "grid placement is out of bounds");
+  auto& target = found->second;
+  if (rowSpan == 1 && columnSpan == 1) {
+    for (auto& [otherIdentity, other] : board->get().clients) {
+      if (otherIdentity == identity || other.layer != "grid"
+          || !occupies(other, static_cast<int>(row), static_cast<int>(column)))
+        continue;
+      if (other.rowSpan != 1 || other.columnSpan != 1)
+        return placementFailure(state, "grid slot is occupied by a span");
+      const auto previousTarget = target;
+      const auto previousOther = other;
+      std::swap(target.row, other.row);
+      std::swap(target.column, other.column);
+      target.rowSpan = 1;
+      target.columnSpan = 1;
+      target.layer = "grid";
+      setGeometry(board->get(), target, monitor);
+      setGeometry(board->get(), other, monitor);
+      if (!dispatchGeometry(identity, target) || !dispatchGeometry(otherIdentity, other)) {
+        target = previousTarget;
+        other = previousOther;
+        return placementFailure(state, "client geometry dispatch failed");
+      }
+      lua_pushboolean(state, true);
+      return 1;
+    }
+  } else if (!freeSlots(board->get(),
+                        identity,
+                        static_cast<int>(row),
+                        static_cast<int>(column),
+                        static_cast<int>(rowSpan),
+                        static_cast<int>(columnSpan))) {
+    return placementFailure(state, "grid placement is occupied");
+  }
+  const auto previousTarget = target;
+  target.layer = "grid";
+  target.row = static_cast<int>(row);
+  target.column = static_cast<int>(column);
+  target.rowSpan = static_cast<int>(rowSpan);
+  target.columnSpan = static_cast<int>(columnSpan);
+  setGeometry(board->get(), target, monitor);
+  if (!dispatchGeometry(identity, target)) {
+    target = previousTarget;
+    return placementFailure(state, "client geometry dispatch failed");
+  }
+  lua_pushboolean(state, true);
+  return 1;
+}
+
+int setLayerLua(lua_State* state) {
+  size_t monitorLength = 0;
+  const auto* monitorValue = lua_tolstring(state, 1, &monitorLength);
+  int workspaceOk = 0;
+  const auto workspace = lua_tointegerx(state, 2, &workspaceOk);
+  size_t identityLength = 0;
+  const auto* identityValue = lua_tolstring(state, 3, &identityLength);
+  const auto layer = luaL_optstring(state, 4, "floating");
+  if (monitorValue == nullptr || monitorLength == 0 || !workspaceOk || workspace <= 0 || identityValue == nullptr
+      || identityLength == 0 || (std::string_view{layer} != "grid" && std::string_view{layer} != "floating"))
+    return placementFailure(state, "invalid layer");
+  const auto board = findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
+  if (!board)
+    return placementFailure(state, "board is not active");
+  const std::string identity{identityValue, identityLength};
+  auto found = board->get().clients.find(identity);
+  if (found == board->get().clients.end())
+    return placementFailure(state, "client identity was not registered");
+  if (std::string_view{layer} == "grid") {
+    if (found->second.layer != "grid"
+        && !freeSlots(board->get(),
+                      identity,
+                      found->second.row,
+                      found->second.column,
+                      found->second.rowSpan,
+                      found->second.columnSpan))
+      return placementFailure(state, "grid placement is occupied");
+    if (found->second.row + found->second.rowSpan > board->get().grid.rows
+        || found->second.column + found->second.columnSpan > board->get().grid.columns)
+      return placementFailure(state, "grid placement is out of bounds");
+    found->second.layer = "grid";
+    setGeometry(board->get(), found->second, std::string_view{monitorValue, monitorLength});
+    if (!dispatchGeometry(identity, found->second))
+      return placementFailure(state, "client geometry dispatch failed");
+  } else {
+    found->second.layer = "floating";
+  }
+  lua_pushboolean(state, true);
+  return 1;
+}
+
+int placeFloatingLua(lua_State* state) {
+  size_t monitorLength = 0;
+  const auto* monitorValue = lua_tolstring(state, 1, &monitorLength);
+  int workspaceOk = 0;
+  const auto workspace = lua_tointegerx(state, 2, &workspaceOk);
+  size_t identityLength = 0;
+  const auto* identityValue = lua_tolstring(state, 3, &identityLength);
+  int valuesOk[4] = {};
+  const auto x = lua_tointegerx(state, 4, &valuesOk[0]);
+  const auto y = lua_tointegerx(state, 5, &valuesOk[1]);
+  const auto width = lua_tointegerx(state, 6, &valuesOk[2]);
+  const auto height = lua_tointegerx(state, 7, &valuesOk[3]);
+  if (monitorValue == nullptr || monitorLength == 0 || !workspaceOk || workspace <= 0 || identityValue == nullptr
+      || identityLength == 0 || !valuesOk[0] || !valuesOk[1] || !valuesOk[2] || !valuesOk[3] || width <= 0
+      || height <= 0)
+    return placementFailure(state, "invalid floating placement");
+  const auto board = findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
+  if (!board)
+    return placementFailure(state, "board is not active");
+  const std::string identity{identityValue, identityLength};
+  auto found = board->get().clients.find(identity);
+  if (found == board->get().clients.end())
+    return placementFailure(state, "client identity was not registered");
+  found->second = {.layer = "floating",
+                   .x = static_cast<int>(x),
+                   .y = static_cast<int>(y),
+                   .width = static_cast<int>(width),
+                   .height = static_cast<int>(height)};
+  if (!dispatchGeometry(identity, found->second))
+    return placementFailure(state, "client geometry dispatch failed");
+  lua_pushboolean(state, true);
+  return 1;
+}
+
+int focusClientLua(lua_State* state) {
+  size_t identityLength = 0;
+  const auto* identityValue = lua_tolstring(state, 1, &identityLength);
+  if (identityValue == nullptr || identityLength == 0)
+    return placementFailure(state, "client identity is required");
+  const std::string identity{identityValue, identityLength};
+  const auto registered = std::ranges::any_of(
+      activeBoards, [&identity](const auto& entry) { return entry.second.clients.contains(identity); });
+  if (!registered)
+    return placementFailure(state, "client identity was not registered");
+  const auto dispatch = HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow " + identity);
+  if (!dispatch.starts_with("ok"))
+    return placementFailure(state, "failed to focus client");
+  lua_pushboolean(state, true);
+  return 1;
 }
 
 int setZoomLua(lua_State* state) {
@@ -325,8 +691,11 @@ void persist() {
     return;
   for (const auto& [_, board] : activeBoards) {
     state << board.monitor << '\t' << board.workspace << '\t' << board.zoom << '\n';
-    for (const auto& [identity, _] : board.clients)
-      state << "client\t" << board.workspace << '\t' << identity << '\n';
+    state << "grid\t" << board.workspace << '\t' << board.grid.rows << '\t' << board.grid.columns << '\t'
+          << board.grid.gap << '\t' << board.grid.margin << '\t' << board.grid.openingLayer << '\n';
+    for (const auto& [identity, placement] : board.clients)
+      state << "client\t" << board.workspace << '\t' << identity << '\t' << placement.layer << '\t' << placement.row
+            << '\t' << placement.column << '\t' << placement.rowSpan << '\t' << placement.columnSpan << '\n';
   }
 }
 
@@ -344,14 +713,64 @@ void restore() {
       try {
         const auto workspace = std::stoi(line.substr(first + 1, second - first - 1));
         const auto board = activeBoards.find(workspace);
-        if (board != activeBoards.end() && !line.substr(second + 1).empty()
-            && jsonClientBelongsToBoard(HyprlandAPI::invokeHyprctlCommand("clients", "-j"),
-                                        line.substr(second + 1),
-                                        board->second.monitor,
-                                        workspace))
-          board->second.clients.emplace(line.substr(second + 1), board->second.monitor);
+        const auto fields = line.substr(second + 1);
+        const auto fieldEnd = fields.find('\t');
+        const auto identity = fields.substr(0, fieldEnd);
+        if (board != activeBoards.end() && !identity.empty()
+            && jsonClientBelongsToBoard(
+                HyprlandAPI::invokeHyprctlCommand("clients", "-j"), identity, board->second.monitor, workspace)) {
+          Board::Placement placement;
+          if (fieldEnd != std::string::npos) {
+            const auto values = fields.substr(fieldEnd + 1);
+            const auto next = [&values](size_t from) { return values.find('\t', from); };
+            const auto layerEnd = next(0);
+            placement.layer = values.substr(0, layerEnd);
+            size_t cursor = layerEnd == std::string::npos ? values.size() : layerEnd + 1;
+            const auto read = [&values, &cursor, &next]() {
+              const auto end = next(cursor);
+              const auto value =
+                  std::stoi(values.substr(cursor, end == std::string::npos ? values.size() - cursor : end - cursor));
+              cursor = end == std::string::npos ? values.size() : end + 1;
+              return value;
+            };
+            if (layerEnd != std::string::npos)
+              placement.row = read(), placement.column = read(), placement.rowSpan = read(),
+              placement.columnSpan = read();
+          }
+          board->second.clients.emplace(identity, placement);
+          if (placement.layer == "grid")
+            setGeometry(board->second, board->second.clients.at(identity), board->second.monitor);
+        }
       } catch (const std::exception&) {
         report("ignored invalid client persistence record");
+      }
+      continue;
+    }
+    if (line.starts_with("grid\t")) {
+      try {
+        const auto workspace = std::stoi(line.substr(first + 1, second - first - 1));
+        const auto board = activeBoards.find(workspace);
+        if (board != activeBoards.end()) {
+          const auto values = line.substr(second + 1);
+          std::vector<std::string> fields;
+          size_t cursor = 0;
+          while (cursor <= values.size()) {
+            const auto end = values.find('\t', cursor);
+            fields.push_back(values.substr(cursor, end == std::string::npos ? values.size() - cursor : end - cursor));
+            if (end == std::string::npos)
+              break;
+            cursor = end + 1;
+          }
+          if (fields.size() == 5 && std::stoi(fields[0]) > 0 && std::stoi(fields[1]) > 0 && std::stoi(fields[2]) >= 0
+              && std::stoi(fields[3]) >= 0 && (fields[4] == "grid" || fields[4] == "floating"))
+            board->second.grid = {.rows = std::stoi(fields[0]),
+                                  .columns = std::stoi(fields[1]),
+                                  .gap = std::stoi(fields[2]),
+                                  .margin = std::stoi(fields[3]),
+                                  .openingLayer = fields[4]};
+        }
+      } catch (const std::exception&) {
+        report("ignored invalid grid persistence record");
       }
       continue;
     }
@@ -436,6 +855,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
   if (!HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "registerClient", registerClientLua)
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "clientActive", clientActiveLua)
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "closeClient", closeClientLua)
+      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "configureGrid", configureGridLua)
+      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "placeGrid", placeGridLua)
+      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "setLayer", setLayerLua)
+      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "placeFloating", placeFloatingLua)
+      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "focusClient", focusClientLua)
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "deactivate", deactivateLua)
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "setZoom", setZoomLua)
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "normal", normalLua)
