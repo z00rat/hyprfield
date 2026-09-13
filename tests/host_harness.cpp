@@ -7,6 +7,7 @@ extern "C" {
 }
 
 #include <algorithm>
+#include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <string>
@@ -24,6 +25,15 @@ namespace {
 hyprfield::testing::HostHarness* active_host = nullptr;
 
 }  // namespace
+
+namespace Event {
+
+UP<CEventBus>& bus() {
+  static auto event_bus = makeUnique<CEventBus>();
+  return event_bus;
+}
+
+}  // namespace Event
 
 CFunctionHook::CFunctionHook(HANDLE owner, void* source, void* destination)
     : m_source(source), m_destination(destination), m_owner(owner) {}
@@ -167,6 +177,28 @@ void HostHarness::setWorkspace(int workspace, std::string_view monitor) {
 
 void HostHarness::setClient(std::string_view identity, int workspace, std::string_view monitor) {
   clients_.push_back({.identity = std::string{identity}, .workspace = workspace, .monitor = std::string{monitor}});
+}
+
+void HostHarness::closeClient(std::string_view identity) {
+  std::erase_if(clients_, [identity](const auto& client) { return client.identity == identity; });
+  active_host = this;
+  Event::bus()->m_events.window.close.emit(PHLWINDOW{});
+  active_host = nullptr;
+}
+
+void HostHarness::removeMonitor(std::string_view name) {
+  std::erase(monitors_, std::string{name});
+  std::erase_if(monitor_geometry_, [name](const auto& monitor) { return monitor.name == name; });
+  active_host = this;
+  Event::bus()->m_events.monitor.removed.emit(PHLMONITOR{});
+  active_host = nullptr;
+}
+
+void HostHarness::removeWorkspace(int workspace) {
+  std::erase_if(workspaces_, [workspace](const auto& entry) { return entry.first == workspace; });
+  active_host = this;
+  Event::bus()->m_events.workspace.removed.emit(PHLWORKSPACEREF{});
+  active_host = nullptr;
 }
 
 void HostHarness::setCommandResults(bool succeeds) {

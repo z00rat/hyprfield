@@ -42,6 +42,9 @@ class HostHarness {
   void setMonitorGeometry(std::string_view name, int x, int y, int width, int height);
   void setWorkspace(int workspace, std::string_view monitor);
   void setClient(std::string_view identity, int workspace, std::string_view monitor);
+  void closeClient(std::string_view identity);
+  void removeMonitor(std::string_view name);
+  void removeWorkspace(int workspace);
   void setCommandResults(bool succeeds);
   void unload();
   void registerLuaFunction(std::string_view namespace_, std::string_view name, LuaFunction function);

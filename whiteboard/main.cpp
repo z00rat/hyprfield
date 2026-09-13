@@ -1,7 +1,9 @@
 #include <algorithm>
+#include <cstdint>
 #include <cstdlib>
 #include <exception>
 #include <filesystem>
+#include <format>
 #include <fstream>
 #include <functional>
 #include <hyprland/src/plugins/HookSystem.hpp>
@@ -28,6 +30,7 @@ constexpr std::string_view kInputMethod = "onMouseMoved";
 
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
+std::vector<CHyprSignalListener> lifecycleListeners;
 
 struct Board {
   std::string monitor;
@@ -275,6 +278,23 @@ void pruneStaleClients() {
     }
 }
 
+void removeClosedClient(PHLWINDOW window) {
+  if (!window) {
+    pruneStaleClients();
+    return;
+  }
+  const auto identity = std::format("0x{:x}", reinterpret_cast<uintptr_t>(window.get()));
+  for (auto& [_, board] : activeBoards)
+    board.clients.erase(identity);
+}
+
+void installLifecycleListeners() {
+  lifecycleListeners.push_back(Event::bus()->m_events.window.close.listen(removeClosedClient));
+  lifecycleListeners.push_back(Event::bus()->m_events.monitor.removed.listen([](PHLMONITOR) { pruneLostBoards(); }));
+  lifecycleListeners.push_back(
+      Event::bus()->m_events.workspace.removed.listen([](PHLWORKSPACEREF) { pruneLostBoards(); }));
+}
+
 bool jsonClientBelongsToBoard(const std::string& json,
                               std::string_view identity,
                               std::string_view monitor,
@@ -468,6 +488,7 @@ int configureGridLua(lua_State* state) {
       return placementFailure(state, "grid configuration would invalidate placement");
   auto& grid = board->get().grid;
   const auto previousGrid = grid;
+  const auto previousPlacements = board->get().clients;
   grid = {.rows = static_cast<int>(rows),
           .columns = static_cast<int>(columns),
           .gap = static_cast<int>(gap),
@@ -478,6 +499,7 @@ int configureGridLua(lua_State* state) {
       setGeometry(board->get(), placement, std::string_view{monitorValue, monitorLength});
       if (!dispatchGeometry(identity, placement)) {
         grid = previousGrid;
+        board->get().clients = previousPlacements;
         return placementFailure(state, "client geometry dispatch failed");
       }
     }
@@ -534,6 +556,8 @@ int placeGridLua(lua_State* state) {
       if (!dispatchGeometry(identity, target) || !dispatchGeometry(otherIdentity, other)) {
         target = previousTarget;
         other = previousOther;
+        dispatchGeometry(identity, previousTarget);
+        dispatchGeometry(otherIdentity, previousOther);
         return placementFailure(state, "client geometry dispatch failed");
       }
       lua_pushboolean(state, true);
@@ -580,6 +604,7 @@ int setLayerLua(lua_State* state) {
   auto found = board->get().clients.find(identity);
   if (found == board->get().clients.end())
     return placementFailure(state, "client identity was not registered");
+  const auto previousPlacement = found->second;
   if (std::string_view{layer} == "grid") {
     if (found->second.layer != "grid"
         && !freeSlots(board->get(),
@@ -594,8 +619,10 @@ int setLayerLua(lua_State* state) {
       return placementFailure(state, "grid placement is out of bounds");
     found->second.layer = "grid";
     setGeometry(board->get(), found->second, std::string_view{monitorValue, monitorLength});
-    if (!dispatchGeometry(identity, found->second))
+    if (!dispatchGeometry(identity, found->second)) {
+      found->second = previousPlacement;
       return placementFailure(state, "client geometry dispatch failed");
+    }
   } else {
     found->second.layer = "floating";
   }
@@ -626,13 +653,16 @@ int placeFloatingLua(lua_State* state) {
   auto found = board->get().clients.find(identity);
   if (found == board->get().clients.end())
     return placementFailure(state, "client identity was not registered");
+  const auto previousPlacement = found->second;
   found->second = {.layer = "floating",
                    .x = static_cast<int>(x),
                    .y = static_cast<int>(y),
                    .width = static_cast<int>(width),
                    .height = static_cast<int>(height)};
-  if (!dispatchGeometry(identity, found->second))
+  if (!dispatchGeometry(identity, found->second)) {
+    found->second = previousPlacement;
     return placementFailure(state, "client geometry dispatch failed");
+  }
   lua_pushboolean(state, true);
   return 1;
 }
@@ -883,6 +913,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     return {};
   }
   restore();
+  installLifecycleListeners();
   HyprlandAPI::addNotification(
       pluginHandle, "[whiteboard] compatibility proof ready", CHyprColor{0.2F, 1.0F, 0.4F, 1.0F}, 5000.0F);
   return {.name = "whiteboard",
@@ -895,6 +926,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
   for (auto* hook : hooks)
     HyprlandAPI::removeFunctionHook(pluginHandle, hook);
   hooks.clear();
+  lifecycleListeners.clear();
   activeBoards.clear();
   pluginHandle = nullptr;
 }

@@ -141,6 +141,10 @@ void verify_whiteboard(const std::string& plugin_path) {
       "whiteboard", "placeFloating", std::vector<std::string>{"DP-1", "42", "address:one", "120", "80", "640", "480"}));
   expect(model.invokeLua("whiteboard", "focusClient", "address:one"));
   expect(model.focusedClient() == "address:one");
+  model.closeClient("address:one");
+  expect(!model.invokeLua("whiteboard", "clientActive", "address:one"));
+  model.setClient("address:one", 42, "DP-1");
+  expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
   expect(!model.invokeLua(
       "whiteboard", "configureGrid", std::vector<std::string>{"DP-1", "42", "0", "4", "10", "20", "grid"}));
   expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "0.8"}));
@@ -153,6 +157,17 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(!model.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
   expect(!model.invokeLua("whiteboard", "clientActive", "address:one"));
   model.unload();
+
+  hyprfield::testing::HostHarness lost;
+  lost.setMonitor("DP-1");
+  lost.setWorkspace(42, "DP-1");
+  lost.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  lost.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
+  expect(lost.loadPlugin(plugin_path, "0.1"));
+  expect(lost.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
+  lost.removeMonitor("DP-1");
+  expect(!lost.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
+  lost.unload();
 
   hyprfield::testing::HostHarness persisted;
   persisted.setMonitor("DP-1");
