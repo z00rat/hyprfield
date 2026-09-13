@@ -89,6 +89,7 @@ class HostHarness {
     std::string identity;
     int workspace;
     std::string monitor;
+    bool floating = false;
   };
   std::vector<Client> clients_;
   std::string focused_client_;

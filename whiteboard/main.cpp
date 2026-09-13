@@ -192,15 +192,27 @@ void setGeometry(Board& board, Board::Placement& placement, std::string_view mon
 }
 
 bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
-  const auto move = HyprlandAPI::invokeHyprctlCommand("dispatch",
-                                                      "movewindowpixel exact " + std::to_string(placement.x) + " "
-                                                          + std::to_string(placement.y) + "," + std::string{identity});
+  const auto address = identity.starts_with("address:") ? std::string{identity} : "address:" + std::string{identity};
+  const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "-j");
+  const auto client = clients.find("\"address\":\"" + std::string{identity} + "\"");
+  const auto objectEnd = client == std::string::npos ? std::string::npos : clients.find("\"address\":\"", client + 1);
+  const auto object =
+      client == std::string::npos
+          ? std::string{}
+          : clients.substr(client, objectEnd == std::string::npos ? std::string::npos : objectEnd - client);
+  if (!object.contains("\"floating\":true")) {
+    const auto floating = HyprlandAPI::invokeHyprctlCommand("dispatch", "togglefloating " + address);
+    if (!floating.starts_with("ok"))
+      return false;
+  }
+  const auto move = HyprlandAPI::invokeHyprctlCommand(
+      "dispatch",
+      "movewindowpixel exact " + std::to_string(placement.x) + " " + std::to_string(placement.y) + "," + address);
   if (!move.starts_with("ok"))
     return false;
-  const auto resize =
-      HyprlandAPI::invokeHyprctlCommand("dispatch",
-                                        "resizewindowpixel exact " + std::to_string(placement.width) + " "
-                                            + std::to_string(placement.height) + "," + std::string{identity});
+  const auto resize = HyprlandAPI::invokeHyprctlCommand("dispatch",
+                                                        "resizewindowpixel exact " + std::to_string(placement.width)
+                                                            + " " + std::to_string(placement.height) + "," + address);
   return resize.starts_with("ok");
 }
 
@@ -635,7 +647,8 @@ int focusClientLua(lua_State* state) {
       activeBoards, [&identity](const auto& entry) { return entry.second.clients.contains(identity); });
   if (!registered)
     return placementFailure(state, "client identity was not registered");
-  const auto dispatch = HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow " + identity);
+  const auto address = identity.starts_with("address:") ? identity : "address:" + identity;
+  const auto dispatch = HyprlandAPI::invokeHyprctlCommand("dispatch", "focuswindow " + std::string{address});
   if (!dispatch.starts_with("ok"))
     return placementFailure(state, "failed to focus client");
   lua_pushboolean(state, true);

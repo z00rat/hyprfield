@@ -271,6 +271,12 @@ std::string HostHarness::invokeHyprctl(std::string_view call, std::string_view a
     }
     if (args.starts_with("focuswindow "))
       focused_client_ = std::string{args.substr(std::string_view{"focuswindow "}.size())};
+    if (args.starts_with("togglefloating ")) {
+      const auto address = std::string{args.substr(std::string_view{"togglefloating "}.size())};
+      for (auto& client : clients_)
+        if (client.identity == address)
+          client.floating = !client.floating;
+    }
     return "ok";
   }
   if (call == "workspaces") {
@@ -305,7 +311,8 @@ std::string HostHarness::invokeHyprctl(std::string_view call, std::string_view a
       if (index != 0)
         result += ',';
       result += "{\"address\":\"" + clients_[index].identity + "\",\"monitor\":\"" + clients_[index].monitor
-                + "\",\"workspace\":{\"id\":" + std::to_string(clients_[index].workspace) + "}}";
+                + "\",\"workspace\":{\"id\":" + std::to_string(clients_[index].workspace)
+                + "},\"floating\":" + (clients_[index].floating ? "true" : "false") + "}";
     }
     return result + ']';
   }
