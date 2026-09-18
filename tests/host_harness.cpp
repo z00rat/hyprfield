@@ -9,7 +9,9 @@ extern "C" {
 #include <algorithm>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
+#include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/render/Renderer.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -44,6 +46,25 @@ bool CFunctionHook::hook() {
 bool CFunctionHook::unhook() {
   return true;
 }
+
+Vector2D CInputManager::getMouseCoordsInternal() {
+  return {};
+}
+
+void Render::IHyprRenderer::damageBox(const int&, const int&, const int&, const int&) {}
+
+namespace NColorManagement {
+
+const SPCPRimaries& getPrimaries(ePrimaries) {
+  static const SPCPRimaries primaries{};
+  return primaries;
+}
+
+WP<const CImageDescription> CImageDescription::from(const SImageDescription&) {
+  return nullptr;
+}
+
+}  // namespace NColorManagement
 
 namespace HyprlandAPI {
 

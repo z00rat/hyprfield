@@ -7,8 +7,11 @@
 #include <format>
 #include <fstream>
 #include <functional>
+#include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/SurfacePassElement.hpp>
 #include <optional>
 #include <sstream>
@@ -68,7 +71,9 @@ struct Board {
 
 std::unordered_map<int, Board> activeBoards;
 CFunctionHook* rendererHook = nullptr;
+CFunctionHook* inputHook = nullptr;
 void drawSurfaceHook(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
+void mouseMovedHook(CInputManager*, IPointer::SMotionEvent);
 void persist();
 bool jsonClientBelongsToBoard(const std::string&, std::string_view, std::string_view, int);
 
@@ -126,7 +131,7 @@ CFunctionHook* installHook(std::string_view className, std::string_view methodNa
   }
 
   const auto destination = methodName == kRenderMethod ? reinterpret_cast<const void*>(&drawSurfaceHook)
-                                                       : reinterpret_cast<const void*>(&inputProofHook);
+                                                       : reinterpret_cast<const void*>(&mouseMovedHook);
   auto* hook = HyprlandAPI::createFunctionHook(pluginHandle, found->address, destination);
   if (hook == nullptr || !hook->hook()) {
     report("failed to register " + std::string{className} + "::" + std::string{methodName});
@@ -192,10 +197,31 @@ Vector2D transformPoint(const Vector2D& point, const MonitorGeometry& geometry, 
 MonitorGeometry monitorGeometry(std::string_view monitor);
 
 void damageBoard(const Board& board) {
-  // The camera is sampled by the render hook on the next frame. Do not damage
-  // unrelated monitors through a global renderer call: this seam is also used
-  // by the offline host harness, where the renderer is intentionally absent.
+  if (g_pHyprRenderer == nullptr)
+    return;
+  const auto geometry = monitorGeometry(board.monitor);
+  g_pHyprRenderer->damageBox(geometry.x, geometry.y, geometry.width, geometry.height);
   persist();
+}
+
+void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
+  if (input != nullptr) {
+    const auto cursor = input->getMouseCoordsInternal();
+    for (const auto& [_, board] : activeBoards) {
+      if (board.zoom >= kManagementZoom)
+        continue;
+      const auto geometry = monitorGeometry(board.monitor);
+      if (cursor.x < geometry.x || cursor.y < geometry.y || cursor.x >= geometry.x + geometry.width
+          || cursor.y >= geometry.y + geometry.height)
+        continue;
+      const auto inverseZoom = 1.0 / boundedZoom(board.zoom);
+      event.delta *= inverseZoom;
+      event.unaccel *= inverseZoom;
+      break;
+    }
+  }
+  if (inputHook != nullptr && inputHook->m_original != nullptr)
+    reinterpret_cast<void (*)(CInputManager*, IPointer::SMotionEvent)>(inputHook->m_original)(input, event);
 }
 
 void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement> weakElement, const CRegion& damage) {
@@ -216,7 +242,7 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
   const auto identity = std::format("0x{:x}", reinterpret_cast<uintptr_t>(window));
   const auto board = std::ranges::find_if(
       activeBoards, [&identity](const auto& entry) { return entry.second.clients.contains(identity); });
-  if (board == activeBoards.end()
+  if (board == activeBoards.end() || board->second.monitor != monitor->m_name
       || !jsonClientBelongsToBoard(HyprlandAPI::invokeHyprctlCommand("clients", "", "j"),
                                    identity,
                                    board->second.monitor,
@@ -1100,7 +1126,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
   }
 
   rendererHook = installHook(kRenderClass, kRenderMethod);
-  if (rendererHook == nullptr) {
+  inputHook = installHook(kInputClass, kInputMethod);
+  if (rendererHook == nullptr || inputHook == nullptr) {
+    for (auto* hook : hooks)
+      HyprlandAPI::removeFunctionHook(pluginHandle, hook);
+    hooks.clear();
     pluginHandle = nullptr;
     return {};
   }
@@ -1157,6 +1187,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
     HyprlandAPI::removeFunctionHook(pluginHandle, hook);
   hooks.clear();
   rendererHook = nullptr;
+  inputHook = nullptr;
   lifecycleListeners.clear();
   activeBoards.clear();
   pluginHandle = nullptr;

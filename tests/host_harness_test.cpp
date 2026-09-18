@@ -35,7 +35,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   host.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
   host.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(host.loadPlugin(plugin_path, "0.1"));
-  expect(host.hookCount() == 1);
+  expect(host.hookCount() == 2);
   expect(host.notifications().back().text == "[whiteboard] workspace model ready; camera renderer active");
   expect(host.invokeLua("whiteboard", "proof", "DP-1"));
   expect(host.notifications().back().text == "[whiteboard proof] monitor-scoped temporary artifact on DP-1");
@@ -53,10 +53,11 @@ void verify_whiteboard(const std::string& plugin_path) {
 
   hyprfield::testing::HostHarness failed_renderer;
   failed_renderer.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  failed_renderer.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   failed_renderer.setHookRegistration(false);
   expect(!failed_renderer.loadPlugin(plugin_path, "0.1"));
   expect(failed_renderer.hookCount() == 0);
-  expect(failed_renderer.notifications().back().text
+  expect(failed_renderer.notifications().front().text
          == "[whiteboard] compatibility gate: failed to register IElementRenderer::drawSurface");
 
   hyprfield::testing::HostHarness dirty;
