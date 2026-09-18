@@ -77,7 +77,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(activation.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
   expect(activation.notifications().back().text == "[whiteboard] workspace 42 active on DP-1");
   expect(activation.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
-  expect(activation.commands().size() == 4);
+  expect(activation.commands().size() == 5);
   expect(activation.commands().at(1).args == "");
   expect(activation.commands().at(2).args == "hl.dsp.workspace.move({workspace=\"42\",monitor=\"DP-1\"})");
   expect(!activation.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-2", "42"}));

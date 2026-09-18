@@ -32,6 +32,13 @@ class IElementRenderer;
 
 namespace {
 
+struct MonitorGeometry {
+  int x = 0;
+  int y = 0;
+  int width = 1920;
+  int height = 1080;
+};
+
 constexpr std::string_view kPluginName = "whiteboard";
 constexpr std::string_view kRenderClass = "IElementRenderer";
 constexpr std::string_view kRenderMethod = "drawSurface";
@@ -47,6 +54,7 @@ struct Board {
   int workspace;
   float zoom = 1.0F;
   Vector2D pan;
+  MonitorGeometry geometry;
   struct Placement {
     std::string layer = "grid";
     int row = 0;
@@ -164,13 +172,6 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
   return found->second;
 }
 
-struct MonitorGeometry {
-  int x = 0;
-  int y = 0;
-  int width = 1920;
-  int height = 1080;
-};
-
 using DrawSurface = void (*)(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
 
 constexpr float kMinimumZoom = 0.5F;
@@ -199,8 +200,7 @@ MonitorGeometry monitorGeometry(std::string_view monitor);
 void damageBoard(const Board& board) {
   if (g_pHyprRenderer == nullptr)
     return;
-  const auto geometry = monitorGeometry(board.monitor);
-  g_pHyprRenderer->damageBox(geometry.x, geometry.y, geometry.width, geometry.height);
+  g_pHyprRenderer->damageBox(board.geometry.x, board.geometry.y, board.geometry.width, board.geometry.height);
   persist();
 }
 
@@ -210,7 +210,7 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
     for (const auto& [_, board] : activeBoards) {
       if (board.zoom >= kManagementZoom)
         continue;
-      const auto geometry = monitorGeometry(board.monitor);
+      const auto& geometry = board.geometry;
       if (cursor.x < geometry.x || cursor.y < geometry.y || cursor.x >= geometry.x + geometry.width
           || cursor.y >= geometry.y + geometry.height)
         continue;
@@ -242,17 +242,13 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
   const auto identity = std::format("0x{:x}", reinterpret_cast<uintptr_t>(window));
   const auto board = std::ranges::find_if(
       activeBoards, [&identity](const auto& entry) { return entry.second.clients.contains(identity); });
-  if (board == activeBoards.end() || board->second.monitor != monitor->m_name
-      || !jsonClientBelongsToBoard(HyprlandAPI::invokeHyprctlCommand("clients", "", "j"),
-                                   identity,
-                                   board->second.monitor,
-                                   board->second.workspace)) {
+  if (board == activeBoards.end() || board->second.monitor != monitor->m_name) {
     if (rendererHook != nullptr && rendererHook->m_original != nullptr)
       reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
     return;
   }
 
-  const auto geometry = monitorGeometry(board->second.monitor);
+  const auto& geometry = board->second.geometry;
   const auto original = element->m_data;
   const auto transformed = transformPoint(original.pos, geometry, board->second);
   element->m_data.pos = transformed;
@@ -532,8 +528,10 @@ int activateLua(lua_State* state) {
   if (!jsonContainsWorkspace(HyprlandAPI::invokeHyprctlCommand("workspaces", "", "j"), workspace, monitor)) {
     return activationFailure(state, "workspace verification failed");
   }
-  activeBoards.try_emplace(static_cast<int>(workspace),
-                           Board{.monitor = monitor, .workspace = static_cast<int>(workspace)});
+  auto [board, inserted] = activeBoards.try_emplace(
+      static_cast<int>(workspace), Board{.monitor = monitor, .workspace = static_cast<int>(workspace)});
+  static_cast<void>(inserted);
+  board->second.geometry = monitorGeometry(monitor);
   debugLog("activated board workspace=" + std::to_string(workspace) + " monitor=" + monitor
            + " boardCount=" + std::to_string(activeBoards.size()));
   HyprlandAPI::addNotification(pluginHandle,
@@ -590,8 +588,10 @@ int registerClientLua(lua_State* state) {
     const auto workspaces = HyprlandAPI::invokeHyprctlCommand("workspaces", "", "j");
     if (jsonContainsMonitor(monitors, monitor)
         && jsonContainsWorkspace(workspaces, static_cast<int>(workspace), monitor)) {
-      activeBoards.emplace(static_cast<int>(workspace),
-                           Board{.monitor = monitor, .workspace = static_cast<int>(workspace)});
+      auto [restored, inserted] = activeBoards.emplace(
+          static_cast<int>(workspace), Board{.monitor = monitor, .workspace = static_cast<int>(workspace)});
+      static_cast<void>(inserted);
+      restored->second.geometry = monitorGeometry(monitor);
       board = findBoard(monitor, static_cast<int>(workspace));
       debugLog("rehydrated board workspace=" + std::to_string(workspace) + " monitor=" + monitor);
     }
@@ -912,7 +912,7 @@ int setZoomLua(lua_State* state) {
   if (!board)
     return activationFailure(state, "board is not active");
   board->get().zoom = boundedZoom(zoom);
-  board->get().pan = boundedPan(board->get(), monitorGeometry(std::string_view{monitorValue, monitorLength}));
+  board->get().pan = boundedPan(board->get(), board->get().geometry);
   damageBoard(board->get());
   lua_pushboolean(state, true);
   return 1;
@@ -935,7 +935,7 @@ int setCameraLua(lua_State* state) {
     return activationFailure(state, "board is not active");
   board->get().zoom = boundedZoom(zoom);
   board->get().pan = Vector2D{panX, panY};
-  board->get().pan = boundedPan(board->get(), monitorGeometry(std::string_view{monitorValue, monitorLength}));
+  board->get().pan = boundedPan(board->get(), board->get().geometry);
   damageBoard(board->get());
   lua_pushboolean(state, true);
   return 1;
@@ -1070,13 +1070,17 @@ void restore() {
       const auto zoom = std::stof(zoomValue);
       const auto monitor = line.substr(0, first);
       if (jsonContainsMonitor(HyprlandAPI::invokeHyprctlCommand("monitors", "", "j"), monitor)
-          && jsonContainsWorkspace(HyprlandAPI::invokeHyprctlCommand("workspaces", "", "j"), workspace, monitor))
-        activeBoards.emplace(workspace,
-                             Board{.monitor = monitor,
-                                   .workspace = workspace,
-                                   .zoom = boundedZoom(zoom),
-                                   .pan = Vector2D{panXValue.empty() ? 0.0 : std::stof(panXValue),
-                                                   panYValue.empty() ? 0.0 : std::stof(panYValue)}});
+          && jsonContainsWorkspace(HyprlandAPI::invokeHyprctlCommand("workspaces", "", "j"), workspace, monitor)) {
+        auto [board, inserted] =
+            activeBoards.emplace(workspace,
+                                 Board{.monitor = monitor,
+                                       .workspace = workspace,
+                                       .zoom = boundedZoom(zoom),
+                                       .pan = Vector2D{panXValue.empty() ? 0.0 : std::stof(panXValue),
+                                                       panYValue.empty() ? 0.0 : std::stof(panYValue)}});
+        static_cast<void>(inserted);
+        board->second.geometry = monitorGeometry(monitor);
+      }
     } catch (const std::exception&) {
       report("ignored invalid board persistence record");
     }
