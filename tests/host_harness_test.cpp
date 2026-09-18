@@ -32,7 +32,7 @@ void verify_host_lifecycle(const std::string& plugin_path) {
 
 void verify_whiteboard(const std::string& plugin_path) {
   hyprfield::testing::HostHarness host;
-  host.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  host.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   host.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(host.loadPlugin(plugin_path, "0.1"));
   expect(host.hookCount() == 2);
@@ -52,13 +52,13 @@ void verify_whiteboard(const std::string& plugin_path) {
       == "[whiteboard] compatibility gate: host check failed: raw-tag=0.56.1, branch=, hash=efb50993780079460b0cbed1363e2166a2de1d9f, dirty=false, selected=0.56.1");
 
   hyprfield::testing::HostHarness failed_renderer;
-  failed_renderer.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  failed_renderer.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   failed_renderer.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   failed_renderer.setHookRegistration(false);
   expect(!failed_renderer.loadPlugin(plugin_path, "0.1"));
   expect(failed_renderer.hookCount() == 0);
   expect(failed_renderer.notifications().front().text
-         == "[whiteboard] compatibility gate: failed to register IElementRenderer::drawSurface");
+         == "[whiteboard] compatibility gate: failed to register IElementRenderer::preDrawSurface");
 
   hyprfield::testing::HostHarness dirty;
   dirty.setHostVersion("0.56.1", true);
@@ -71,7 +71,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   activation.setMonitor("DP-1");
   activation.setMonitor("DP-2");
   activation.setWorkspace(42, "DP-1");
-  activation.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  activation.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   activation.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(activation.loadPlugin(plugin_path, "0.1"));
   expect(activation.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
@@ -87,7 +87,7 @@ void verify_whiteboard(const std::string& plugin_path) {
 
   hyprfield::testing::HostHarness missing_monitor;
   missing_monitor.setWorkspace(42, "DP-1");
-  missing_monitor.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  missing_monitor.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   missing_monitor.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(missing_monitor.loadPlugin(plugin_path, "0.1"));
   expect(!missing_monitor.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-9", "42"}));
@@ -97,7 +97,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   hyprfield::testing::HostHarness failed_command;
   failed_command.setMonitor("DP-1");
   failed_command.setWorkspace(42, "DP-1");
-  failed_command.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  failed_command.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   failed_command.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   failed_command.setCommandResults(false);
   expect(failed_command.loadPlugin(plugin_path, "0.1"));
@@ -107,7 +107,7 @@ void verify_whiteboard(const std::string& plugin_path) {
 
   hyprfield::testing::HostHarness invalid_workspace;
   invalid_workspace.setMonitor("DP-1");
-  invalid_workspace.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  invalid_workspace.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   invalid_workspace.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(invalid_workspace.loadPlugin(plugin_path, "0.1"));
   expect(!invalid_workspace.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "99"}));
@@ -118,7 +118,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   model.setWorkspace(42, "DP-1");
   model.setClient("address:one", 42, "DP-1");
   model.setClient("address:two", 42, "DP-1");
-  model.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  model.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   model.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(model.loadPlugin(plugin_path, "0.1"));
   expect(model.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
@@ -162,7 +162,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   hyprfield::testing::HostHarness lost;
   lost.setMonitor("DP-1");
   lost.setWorkspace(42, "DP-1");
-  lost.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  lost.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   lost.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(lost.loadPlugin(plugin_path, "0.1"));
   expect(lost.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
@@ -176,7 +176,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   persisted.setMonitor("DP-1");
   persisted.setWorkspace(42, "DP-1");
   persisted.setClient("address:persisted", 42, "DP-1");
-  persisted.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  persisted.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   persisted.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(persisted.loadPlugin(plugin_path, "0.1"));
   expect(persisted.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
@@ -189,7 +189,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   restored.setMonitor("DP-1");
   restored.setWorkspace(42, "DP-1");
   restored.setClient("address:persisted", 42, "DP-1");
-  restored.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  restored.setFunction("IElementRenderer::preDrawSurface(WP<CSurfacePassElement>, CRegion const&)");
   restored.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(restored.loadPlugin(plugin_path, "0.1"));
   expect(restored.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));

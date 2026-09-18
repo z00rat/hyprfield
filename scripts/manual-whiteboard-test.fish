@@ -99,7 +99,7 @@ function restore_windows
         set -l original_floating $fields[8]
         set -l current_floating (hyprctl -j clients | jq -r --arg address "$address" '.[] | select(.address == $address) | .floating' | head -n 1)
         if test "$current_floating" != "$original_floating"
-            set -l floating_result (hyprctl dispatch togglefloating "address:$address" 2>&1)
+            set -l floating_result (hyprctl dispatch "hl.dsp.window.float({action=\"toggle\",window=\"address:$address\"})" 2>&1)
             if not string match -q 'ok*' -- $floating_result
                 echo "WARNING: could not restore floating state for $address: $floating_result"
             end
@@ -109,8 +109,8 @@ function restore_windows
             echo "WARNING: could not restore workspace for $address: $workspace_result"
         end
         if test "$original_floating" = "true"
-            set -l move_result (hyprctl dispatch movewindowpixel "exact $original_x $original_y,address:$address" 2>&1)
-            set -l resize_result (hyprctl dispatch resizewindowpixel "exact $original_width $original_height,address:$address" 2>&1)
+            set -l move_result (hyprctl dispatch "hl.dsp.window.move({x=$original_x,y=$original_y,window=\"address:$address\"})" 2>&1)
+            set -l resize_result (hyprctl dispatch "hl.dsp.window.resize({x=$original_width,y=$original_height,window=\"address:$address\"})" 2>&1)
             if not string match -q 'ok*' -- $move_result
                 echo "WARNING: could not restore position for $address: $move_result"
             end
@@ -128,6 +128,10 @@ function cleanup
     set cleanup_done 1
     restore_windows
     if test "$load_attempted" -eq 1
+        for address in $test_addresses
+            forget_test_client $address
+        end
+        hyprctl dispatch "function() hl.plugin.whiteboard.save() end" >/dev/null 2>&1
         set -l unload_output ""
         set -l unload_ok 0
         for attempt in 1 2 3 4 5
@@ -165,6 +169,11 @@ function whiteboard_dispatch
     string match -q 'ok*' -- $response
 end
 
+function forget_test_client
+    set -l address $argv[1]
+    hyprctl dispatch "function() pcall(function() hl.plugin.whiteboard.closeClient('$address') end) end" >/dev/null 2>&1
+end
+
 if not test -f "$plugin"
     echo "Missing plugin: $plugin"
     exit 1
@@ -189,6 +198,8 @@ end
 
 if test $result -eq 0
     for address in $test_addresses
+        # Clear identities left by an interrupted previous run.
+        forget_test_client $address
         if not whiteboard_dispatch "function() hl.plugin.whiteboard.registerClient('$monitor', $workspace, '$address') end"
             echo "Could not register window $address."
             set result 1

@@ -41,7 +41,7 @@ struct MonitorGeometry {
 
 constexpr std::string_view kPluginName = "whiteboard";
 constexpr std::string_view kRenderClass = "IElementRenderer";
-constexpr std::string_view kRenderMethod = "drawSurface";
+constexpr std::string_view kRenderMethod = "preDrawSurface";
 constexpr std::string_view kInputClass = "CInputManager";
 constexpr std::string_view kInputMethod = "onMouseMoved";
 
