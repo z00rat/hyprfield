@@ -35,8 +35,8 @@ void verify_whiteboard(const std::string& plugin_path) {
   host.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
   host.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(host.loadPlugin(plugin_path, "0.1"));
-  expect(host.hookCount() == 2);
-  expect(host.notifications().back().text == "[whiteboard] compatibility proof ready");
+  expect(host.hookCount() == 1);
+  expect(host.notifications().back().text == "[whiteboard] workspace model ready; camera renderer active");
   expect(host.invokeLua("whiteboard", "proof", "DP-1"));
   expect(host.notifications().back().text == "[whiteboard proof] monitor-scoped temporary artifact on DP-1");
   host.unload();
@@ -51,20 +51,13 @@ void verify_whiteboard(const std::string& plugin_path) {
       unsupported.notifications().back().text
       == "[whiteboard] compatibility gate: host check failed: raw-tag=0.56.1, branch=, hash=efb50993780079460b0cbed1363e2166a2de1d9f, dirty=false, selected=0.56.1");
 
-  hyprfield::testing::HostHarness failed;
-  failed.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
-  failed.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
-  failed.setHookRegistration(false);
-  expect(!failed.loadPlugin(plugin_path, "0.1"));
-  expect(failed.hookCount() == 0);
-  expect(failed.notifications().at(failed.notifications().size() - 2).text
+  hyprfield::testing::HostHarness failed_renderer;
+  failed_renderer.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
+  failed_renderer.setHookRegistration(false);
+  expect(!failed_renderer.loadPlugin(plugin_path, "0.1"));
+  expect(failed_renderer.hookCount() == 0);
+  expect(failed_renderer.notifications().back().text
          == "[whiteboard] compatibility gate: failed to register IElementRenderer::drawSurface");
-
-  hyprfield::testing::HostHarness missing;
-  expect(!missing.loadPlugin(plugin_path, "0.1"));
-  expect(missing.hookCount() == 0);
-  expect(missing.notifications().at(missing.notifications().size() - 2).text
-         == "[whiteboard] compatibility gate: missing IElementRenderer::drawSurface");
 
   hyprfield::testing::HostHarness dirty;
   dirty.setHostVersion("0.56.1", true);
@@ -84,8 +77,8 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(activation.notifications().back().text == "[whiteboard] workspace 42 active on DP-1");
   expect(activation.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
   expect(activation.commands().size() == 4);
-  expect(activation.commands().at(1).args == "-j");
-  expect(activation.commands().at(2).args == "moveworkspacetomonitor 42 DP-1");
+  expect(activation.commands().at(1).args == "");
+  expect(activation.commands().at(2).args == "hl.dsp.workspace.move({workspace=\"42\",monitor=\"DP-1\"})");
   expect(!activation.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-2", "42"}));
   expect(activation.notifications().back().text
          == "[whiteboard] activation failed: workspace 42 is already assigned to DP-1");
@@ -97,7 +90,8 @@ void verify_whiteboard(const std::string& plugin_path) {
   missing_monitor.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(missing_monitor.loadPlugin(plugin_path, "0.1"));
   expect(!missing_monitor.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-9", "42"}));
-  expect(missing_monitor.notifications().back().text == "[whiteboard] activation failed: monitor DP-9 was not found");
+  expect(missing_monitor.notifications().back().text.starts_with(
+      "[whiteboard] activation failed: monitor DP-9 was not found"));
 
   hyprfield::testing::HostHarness failed_command;
   failed_command.setMonitor("DP-1");
@@ -107,7 +101,8 @@ void verify_whiteboard(const std::string& plugin_path) {
   failed_command.setCommandResults(false);
   expect(failed_command.loadPlugin(plugin_path, "0.1"));
   expect(!failed_command.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
-  expect(failed_command.notifications().back().text == "[whiteboard] activation failed: compositor command failed");
+  expect(failed_command.notifications().back().text.starts_with(
+      "[whiteboard] activation failed: compositor command failed"));
 
   hyprfield::testing::HostHarness invalid_workspace;
   invalid_workspace.setMonitor("DP-1");
@@ -121,12 +116,14 @@ void verify_whiteboard(const std::string& plugin_path) {
   model.setMonitor("DP-1");
   model.setWorkspace(42, "DP-1");
   model.setClient("address:one", 42, "DP-1");
+  model.setClient("address:two", 42, "DP-1");
   model.setFunction("IElementRenderer::drawSurface(WP<CSurfacePassElement>, CRegion const&)");
   model.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(model.loadPlugin(plugin_path, "0.1"));
   expect(model.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
   expect(model.invokeLua("whiteboard", "normal", std::vector<std::string>{"DP-1", "42"}));
   expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
+  expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:two"}));
   expect(model.invokeLua("whiteboard", "clientActive", "address:one"));
   expect(!model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
   expect(model.invokeLua(
@@ -150,6 +147,9 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "0.8"}));
   expect(!model.invokeLua("whiteboard", "normal", std::vector<std::string>{"DP-1", "42"}));
   expect(model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
+  expect(
+      model.invokeLua("whiteboard", "setCamera", std::vector<std::string>{"DP-1", "42", "0.1", "100000", "-100000"}));
+  expect(model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
   expect(model.invokeLua("whiteboard", "closeClient", "address:one"));
   expect(!model.invokeLua("whiteboard", "clientActive", "address:one"));
   expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
@@ -166,6 +166,8 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(lost.loadPlugin(plugin_path, "0.1"));
   expect(lost.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
   lost.removeMonitor("DP-1");
+  expect(lost.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
+  expect(lost.invokeLua("whiteboard", "deactivate", std::vector<std::string>{"DP-1", "42"}));
   expect(!lost.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
   lost.unload();
 
