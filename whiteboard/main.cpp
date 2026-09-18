@@ -225,8 +225,8 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
 }
 
 void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement> weakElement, const CRegion& damage) {
-  const auto element = weakElement.lock();
-  if (!element || element->m_data.pWindow == nullptr || element->m_data.pMonitor == nullptr) {
+  auto* element = weakElement.get();
+  if (element == nullptr || element->m_data.pWindow == nullptr || element->m_data.pMonitor == nullptr) {
     if (rendererHook != nullptr && rendererHook->m_original != nullptr)
       reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
     return;
