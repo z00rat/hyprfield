@@ -484,7 +484,10 @@ bool jsonClientBelongsToBoard(const std::string& json,
     return false;
   const auto object =
       json.substr(objectStart, nextAddress == std::nullopt ? std::string::npos : *nextAddress - objectStart);
-  return jsonIntegerField(object, "id").value_or(0) == workspace && jsonStringFieldEquals(object, "monitor", monitor);
+  // The clients JSON uses a numeric monitor id on current Hyprland builds;
+  // the board's workspace-to-monitor assignment is the authoritative check.
+  static_cast<void>(monitor);
+  return jsonIntegerField(object, "id").value_or(0) == workspace;
 }
 
 int activateLua(lua_State* state) {

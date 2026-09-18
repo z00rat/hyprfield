@@ -104,7 +104,7 @@ function restore_windows
                 echo "WARNING: could not restore floating state for $address: $floating_result"
             end
         end
-        set -l workspace_result (hyprctl dispatch movetoworkspacesilent "$original_workspace,address:$address" 2>&1)
+        set -l workspace_result (hyprctl dispatch "hl.dsp.window.move({workspace=\"$original_workspace\",follow=false,window=\"address:$address\"})" 2>&1)
         if not string match -q 'ok*' -- $workspace_result
             echo "WARNING: could not restore workspace for $address: $workspace_result"
         end
