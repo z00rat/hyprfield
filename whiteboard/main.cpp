@@ -214,6 +214,20 @@ Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
   return {std::clamp(board.pan.x, -maximum.x, maximum.x), std::clamp(board.pan.y, -maximum.y, maximum.y)};
 }
 
+Board::Geometry projectGeometry(const Board& board, const Board::Geometry& world) {
+  const auto zoom = boundedZoom(board.zoom);
+  const auto monitorCenter =
+      Vector2D{board.geometry.x + board.geometry.width / 2.0, board.geometry.y + board.geometry.height / 2.0};
+  const auto worldCenter = Vector2D{world.x + world.width / 2.0, world.y + world.height / 2.0};
+  const auto screenCenter = monitorCenter + (worldCenter - monitorCenter) * zoom + board.pan;
+  const auto width = static_cast<int>(std::lround(world.width * zoom));
+  const auto height = static_cast<int>(std::lround(world.height * zoom));
+  return {.x = static_cast<int>(std::lround(screenCenter.x - width / 2.0)),
+          .y = static_cast<int>(std::lround(screenCenter.y - height / 2.0)),
+          .width = width,
+          .height = height};
+}
+
 MonitorGeometry monitorGeometry(std::string_view monitor);
 
 void damageBoard(const Board& board) {
@@ -467,23 +481,22 @@ bool dispatchPosition(std::string_view identity, int x, int y) {
 bool applyPan(Board& board, Vector2D pan) {
   const auto previousPan = board.pan;
   board.pan = pan;
-  std::vector<std::pair<std::string, Vector2D>> moved;
+  std::vector<std::string> moved;
   for (const auto& [identity, placement] : board.clients) {
     if (placement.layer != "grid")
       continue;
-    const auto position = Vector2D{placement.world.x + board.pan.x, placement.world.y + board.pan.y};
-    if (!dispatchPosition(
-            identity, static_cast<int>(std::lround(position.x)), static_cast<int>(std::lround(position.y)))) {
+    const auto projected = projectGeometry(board, placement.world);
+    if (!dispatchPosition(identity, projected.x, projected.y)) {
       board.pan = previousPan;
-      for (const auto& [movedIdentity, _] : moved) {
+      for (const auto& movedIdentity : moved) {
         const auto& movedPlacement = board.clients.at(movedIdentity);
         dispatchPosition(movedIdentity,
-                         static_cast<int>(std::lround(movedPlacement.world.x + previousPan.x)),
-                         static_cast<int>(std::lround(movedPlacement.world.y + previousPan.y)));
+                         projectGeometry(board, movedPlacement.world).x,
+                         projectGeometry(board, movedPlacement.world).y);
       }
       return false;
     }
-    moved.emplace_back(identity, position);
+    moved.push_back(identity);
   }
   return true;
 }
