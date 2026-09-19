@@ -201,11 +201,12 @@ Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
   const auto canvasTop = board.grid.margin + rowEdge(board.grid.canvasMinRow);
   const auto canvasBottom = board.grid.margin + rowEdge(board.grid.canvasMaxRow) - board.grid.gap;
   const auto center = Vector2D{geometry.width / 2.0, geometry.height / 2.0};
-  const auto minimum = Vector2D{geometry.width - (center.x + (canvasRight - center.x) * zoom),
-                                geometry.height - (center.y + (canvasBottom - center.y) * zoom)};
-  const auto maximum = Vector2D{-center.x - (canvasLeft - center.x) * zoom, -center.y - (canvasTop - center.y) * zoom};
-  return {std::clamp(board.pan.x, std::min(maximum.x, minimum.x), std::max(maximum.x, minimum.x)),
-          std::clamp(board.pan.y, std::min(maximum.y, minimum.y), std::max(maximum.y, minimum.y))};
+  const auto leftExtent = std::abs(center.x + (canvasLeft - center.x) * zoom);
+  const auto rightExtent = std::abs(geometry.width - (center.x + (canvasRight - center.x) * zoom));
+  const auto topExtent = std::abs(center.y + (canvasTop - center.y) * zoom);
+  const auto bottomExtent = std::abs(geometry.height - (center.y + (canvasBottom - center.y) * zoom));
+  const auto maximum = Vector2D{std::max(leftExtent, rightExtent), std::max(topExtent, bottomExtent)};
+  return {std::clamp(board.pan.x, -maximum.x, maximum.x), std::clamp(board.pan.y, -maximum.y, maximum.y)};
 }
 
 MonitorGeometry monitorGeometry(std::string_view monitor);
@@ -1033,6 +1034,7 @@ int setCameraLua(lua_State* state) {
   if (zoom != 1.0F)
     return activationFailure(state, "zoom is disabled while pan-only camera mode is active");
   board->get().zoom = 1.0F;
+  board->get().pan = Vector2D{panX, panY};
   const auto pan = boundedPan(board->get(), board->get().geometry);
   if (!applyPan(board->get(), pan))
     return activationFailure(state, "camera geometry dispatch failed");
