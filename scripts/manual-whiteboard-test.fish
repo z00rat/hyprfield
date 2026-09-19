@@ -263,29 +263,40 @@ if test $result -eq 0
     echo "SUCCESS: Whiteboard placed all active windows."
     echo "Expected ordinary grid: all $window_count tested windows are present, floating, and non-overlapping."
     echo "Expected ordinary grid sizes: the central 2x4 layout uses native 1x geometry."
-    echo "Holding the ordinary grid for 5 seconds..."
-    sleep 5
+    echo "Holding the ordinary grid for 2 seconds..."
+    sleep 2
     snapshot_grid "ordinary grid" "$workspace"
 end
 
 if test $result -eq 0
-    echo "Zooming the whiteboard to 0.75x..."
+    echo "Zooming the whiteboard to 0.9x for 3 seconds..."
     echo "Expected: the same windows remain present, their sizes shrink, and more surrounding canvas is visible."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.9, 0, 0) end"
+        echo "Could not set 0.9x zoom."
+        set result 1
+    end
+    sleep 3
+    snapshot_grid "zoom 0.9x" "$workspace"
+end
+
+if test $result -eq 0
+    echo "Zooming the whiteboard to 0.75x for 3 seconds..."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.75, 0, 0) end"
         echo "Could not set 0.75x zoom."
         set result 1
     end
+    sleep 3
     snapshot_grid "zoom 0.75x" "$workspace"
 end
 
 if test $result -eq 0
-    sleep 2
-    echo "Zooming the whiteboard to 0.5x..."
+    echo "Zooming the whiteboard to 0.5x for 3 seconds..."
     echo "Expected: the same windows remain present, approximately half-size, with more surrounding windows visible."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.5, 0, 0) end"
         echo "Could not set 0.5x zoom."
         set result 1
     end
+    sleep 3
     snapshot_grid "zoom 0.5x" "$workspace"
 end
 
@@ -309,7 +320,7 @@ if test $result -eq 0
 end
 
 if test $result -eq 0
-    sleep 2
+    sleep 1
     echo "Panning the 1x whiteboard viewport left..."
     echo "Expected: windows move to the opposite side of the canvas; sizes stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, $pan_distance, 0) end"
@@ -320,7 +331,7 @@ if test $result -eq 0
 end
 
 if test $result -eq 0
-    sleep 2
+    sleep 1
     echo "Panning the 1x whiteboard viewport up..."
     echo "Expected: the surrounding shelf becomes visible; sizes stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, $pan_distance) end"
@@ -331,7 +342,7 @@ if test $result -eq 0
 end
 
 if test $result -eq 0
-    sleep 2
+    sleep 1
     echo "Panning the 1x whiteboard viewport down..."
     echo "Expected: the canvas returns toward the central grid; sizes stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -$pan_distance) end"
@@ -345,13 +356,13 @@ if test $result -eq 0
     echo "Restoring the ordinary viewport..."
     echo "Expected restored-origin snapshot: it matches the ordinary-grid snapshot exactly."
     echo
-    sleep 2
+    sleep 1
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 0) end"
         echo "Could not restore ordinary viewport."
         set result 1
     end
     snapshot_grid "restored origin" "$workspace"
-    sleep 2
+    sleep 1
 end
 
 cleanup
