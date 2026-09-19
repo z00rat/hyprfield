@@ -16,6 +16,7 @@
 #include <hyprland/src/render/ElementRenderer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/SurfacePassElement.hpp>
+#include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 #include <optional>
 #include <sstream>
@@ -296,11 +297,28 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
   const auto transformedSize = Vector2D{original.w * zoom, original.h * zoom};
   const auto transformed = zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0;
   if (transformed) {
-    element->m_data.pos = transformedPosition;
-    element->m_data.localPos = original.localPos * zoom;
-    element->m_data.w = transformedSize.x;
-    element->m_data.h = transformedSize.y;
-    element->m_data.squishOversized = false;
+    element->m_data.alpha = 0.0F;
+    if (rendererHook != nullptr && rendererHook->m_original != nullptr)
+      reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
+    element->m_data = original;
+    if (original.texture != nullptr)
+      renderer->drawElement(makeShared<CTexPassElement>(CTexPassElement::SRenderData{
+                                .tex = original.texture,
+                                .box = {transformedPosition, transformedSize},
+                                .a = original.alpha,
+                                .overallA = original.fadeAlpha,
+                                .round = original.dontRound ? 0 : original.rounding,
+                                .roundingPower = original.roundingPower,
+                                .allowCustomUV = true,
+                                .surface = original.surface,
+                                .wrapX = original.wrapX,
+                                .wrapY = original.wrapY,
+                                .discardMode = original.discardMode,
+                                .discardOpacity = original.discardOpacity,
+                                .currentLS = original.pLS,
+                            }),
+                            damage);
+    return;
   }
   if (rendererHook != nullptr && rendererHook->m_original != nullptr)
     reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
