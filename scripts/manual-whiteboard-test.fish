@@ -85,11 +85,8 @@ if test (count $test_addresses) -lt 4
     echo "At least four non-fullscreen windows are required for the rectangular grid test."
     exit 1
 end
-set -l board_addresses $test_addresses[1..4]
+set -l board_addresses $test_addresses
 echo "Temporarily testing windows: $board_addresses"
-if test (count $test_addresses) -gt 4
-    echo "Leaving extra windows outside the whiteboard layout: $test_addresses[5..-1]"
-end
 
 function restore_windows
     echo "Restoring original window placement..."

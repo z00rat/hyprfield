@@ -77,6 +77,7 @@ struct Board {
   struct Grid {
     int rows = 2;
     int columns = 4;
+    int canvasColumns = 4;
     int gap = 16;
     int margin = 32;
     std::string openingLayer = "grid";
@@ -791,6 +792,7 @@ int configureGridLua(lua_State* state) {
   const auto previousPlacements = board->get().clients;
   grid = {.rows = static_cast<int>(rows),
           .columns = static_cast<int>(columns),
+          .canvasColumns = static_cast<int>(columns),
           .gap = static_cast<int>(gap),
           .margin = static_cast<int>(margin),
           .openingLayer = layer};
@@ -834,7 +836,7 @@ int placeGridLua(lua_State* state) {
   auto found = board->get().clients.find(identity);
   if (found == board->get().clients.end())
     return placementFailure(state, "client identity was not registered");
-  if (row + rowSpan > board->get().grid.rows || column + columnSpan > board->get().grid.columns)
+  if (row + rowSpan > board->get().grid.rows)
     return placementFailure(state, "grid placement is out of bounds");
   auto& target = found->second;
   if (rowSpan == 1 && columnSpan == 1) {
@@ -877,6 +879,7 @@ int placeGridLua(lua_State* state) {
   target.column = static_cast<int>(column);
   target.rowSpan = static_cast<int>(rowSpan);
   target.columnSpan = static_cast<int>(columnSpan);
+  board->get().grid.canvasColumns = std::max(board->get().grid.canvasColumns, target.column + target.columnSpan);
   setGeometry(board->get(), target, monitor);
   if (!dispatchGeometry(identity, target)) {
     target = previousTarget;
@@ -914,9 +917,10 @@ int setLayerLua(lua_State* state) {
                       found->second.rowSpan,
                       found->second.columnSpan))
       return placementFailure(state, "grid placement is occupied");
-    if (found->second.row + found->second.rowSpan > board->get().grid.rows
-        || found->second.column + found->second.columnSpan > board->get().grid.columns)
+    if (found->second.row + found->second.rowSpan > board->get().grid.rows)
       return placementFailure(state, "grid placement is out of bounds");
+    board->get().grid.canvasColumns =
+        std::max(board->get().grid.canvasColumns, found->second.column + found->second.columnSpan);
     found->second.layer = "grid";
     setGeometry(board->get(), found->second, std::string_view{monitorValue, monitorLength});
     if (!dispatchGeometry(identity, found->second)) {
@@ -1110,6 +1114,8 @@ void restore() {
               placement.columnSpan = read();
           }
           board->second.clients.emplace(identity, placement);
+          board->second.grid.canvasColumns =
+              std::max(board->second.grid.canvasColumns, placement.column + placement.columnSpan);
           if (placement.layer == "grid")
             setGeometry(board->second, board->second.clients.at(identity), board->second.monitor);
         }
@@ -1137,6 +1143,7 @@ void restore() {
               && std::stoi(fields[3]) >= 0 && (fields[4] == "grid" || fields[4] == "floating"))
             board->second.grid = {.rows = std::stoi(fields[0]),
                                   .columns = std::stoi(fields[1]),
+                                  .canvasColumns = std::stoi(fields[1]),
                                   .gap = std::stoi(fields[2]),
                                   .margin = std::stoi(fields[3]),
                                   .openingLayer = fields[4]};
