@@ -224,6 +224,8 @@ end
 if test $result -eq 0
     echo
     echo "SUCCESS: Whiteboard placed all active windows."
+    echo "Holding the ordinary grid for 5 seconds..."
+    sleep 5
     echo "Entering bounded camera management at 0.8x (zoom-only test)..."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.8, 0, 0) end"
         echo "Could not enter camera management mode."
