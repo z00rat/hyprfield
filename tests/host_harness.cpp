@@ -14,6 +14,7 @@ extern "C" {
 #include <hyprland/src/render/ElementRenderer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -23,6 +24,15 @@ CHyprColor::CHyprColor(float red, float green, float blue, float alpha) : r(red)
 Log::CLogger::CLogger() = default;
 
 Hyprutils::CLI::CLogger::CLogger() {}
+
+namespace State {
+
+UP<CMonitorStateTracker>& monitorState() {
+  static UP<CMonitorStateTracker> state;
+  return state;
+}
+
+}  // namespace State
 
 namespace {
 

@@ -9,6 +9,7 @@
 #include <format>
 #include <fstream>
 #include <functional>
+#include <hyprland/src/Compositor.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
@@ -17,6 +18,7 @@
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/SurfacePassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
+#include <hyprland/src/state/MonitorState.hpp>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -370,6 +372,16 @@ double jsonNumber(const std::string& json, std::string_view field, double fallba
 }
 
 MonitorGeometry monitorGeometry(std::string_view monitor) {
+  if (State::monitorState() != nullptr) {
+    for (const auto& candidate : State::monitorState()->monitors()) {
+      if (candidate == nullptr || candidate->m_name != monitor)
+        continue;
+      return {.x = static_cast<int>(std::lround(candidate->m_position.x)),
+              .y = static_cast<int>(std::lround(candidate->m_position.y)),
+              .width = static_cast<int>(std::lround(candidate->m_size.x)),
+              .height = static_cast<int>(std::lround(candidate->m_size.y))};
+    }
+  }
   const auto json = HyprlandAPI::invokeHyprctlCommand("monitors", "", "j");
   const auto name = jsonFieldValue(json, "name");
   if (!name || !jsonStringFieldEquals(json, "name", monitor))
