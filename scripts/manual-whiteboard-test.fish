@@ -252,9 +252,9 @@ end
 if test $result -eq 0
     echo
     echo "SUCCESS: Whiteboard placed all active windows."
-    snapshot_grid "ordinary grid" "$workspace"
     echo "Holding the ordinary grid for 5 seconds..."
     sleep 5
+    snapshot_grid "ordinary grid" "$workspace"
     echo "Panning the 1x whiteboard viewport right..."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 350, 0) end"
         echo "Could not pan right."
