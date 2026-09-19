@@ -455,7 +455,8 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
       client == std::string::npos
           ? std::string{}
           : clients.substr(client, objectEnd == std::string::npos ? std::string::npos : objectEnd - client);
-  if (!object.contains("\"floating\":true")) {
+  const auto floating = object.contains("\"floating\":true") || object.contains("\"floating\": true");
+  if (!floating) {
     const auto floating = invokeDispatcher("hl.dsp.window.float({window=\"" + address + "\"})");
     if (!floating.starts_with("ok"))
       return false;
