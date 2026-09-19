@@ -11,7 +11,9 @@ extern "C" {
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/render/ElementRenderer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
+#include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -52,6 +54,37 @@ Vector2D CInputManager::getMouseCoordsInternal() {
 }
 
 void Render::IHyprRenderer::damageBox(const int&, const int&, const int&, const int&) {}
+void Render::IElementRenderer::drawElement(WP<IPassElement>, const CRegion&) {}
+CTexPassElement::CTexPassElement(SRenderData&& data) : m_data(std::move(data)) {}
+std::vector<UP<IPassElement>> IPassElement::draw() {
+  return {};
+}
+void IPassElement::discard() {}
+bool IPassElement::undiscardable() {
+  return false;
+}
+std::optional<CBox> IPassElement::boundingBox() {
+  return std::nullopt;
+}
+CRegion IPassElement::opaqueRegion() {
+  return {};
+}
+bool IPassElement::disableSimplification() {
+  return false;
+}
+bool CTexPassElement::needsLiveBlur() {
+  return false;
+}
+bool CTexPassElement::needsPrecomputeBlur() {
+  return false;
+}
+std::optional<CBox> CTexPassElement::boundingBox() {
+  return m_data.box;
+}
+CRegion CTexPassElement::opaqueRegion() {
+  return {};
+}
+void CTexPassElement::discard() {}
 
 namespace NColorManagement {
 

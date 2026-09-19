@@ -202,7 +202,7 @@ set -l grid_rows (math "ceil($window_count / 4)")
 if test "$grid_rows" -lt 1
     set grid_rows 1
 end
-if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, 4, 20, 20, 'grid') end"
+    if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, 4, 2, 2, 'grid') end"
     echo "Could not configure the Whiteboard grid."
     set result 1
 end

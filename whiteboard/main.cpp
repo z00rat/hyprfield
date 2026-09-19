@@ -12,8 +12,10 @@
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
+#include <hyprland/src/render/ElementRenderer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/SurfacePassElement.hpp>
+#include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -262,20 +264,34 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
              + " size=" + std::to_string(original.w) + "," + std::to_string(original.h)
              + " transformed=" + std::to_string(transformed.x) + "," + std::to_string(transformed.y) + "x"
              + std::to_string(original.w * boundedZoom(board->second.zoom)));
-  element->m_data.pos = transformed;
-  element->m_data.localPos = transformPoint(original.localPos, geometry, board->second);
-  element->m_data.w = original.w * boundedZoom(board->second.zoom);
-  element->m_data.h = original.h * boundedZoom(board->second.zoom);
-  if (element->m_data.clipBox.w > 0.0 && element->m_data.clipBox.h > 0.0) {
-    const auto clipPosition = transformPoint({original.clipBox.x, original.clipBox.y}, geometry, board->second);
-    element->m_data.clipBox.x = clipPosition.x;
-    element->m_data.clipBox.y = clipPosition.y;
-    element->m_data.clipBox.w = original.clipBox.w * boundedZoom(board->second.zoom);
-    element->m_data.clipBox.h = original.clipBox.h * boundedZoom(board->second.zoom);
-  }
+  // Let Hyprland prepare the surface, but suppress its ordinary untransformed
+  // draw. Render the transformed copy explicitly, like Astroland's custom
+  // texture passes.
+  element->m_data.alpha = 0.0F;
   if (rendererHook != nullptr && rendererHook->m_original != nullptr)
     reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
   element->m_data = original;
+  if (original.texture == nullptr)
+    return;
+
+  const auto zoom = boundedZoom(board->second.zoom);
+  CTexPassElement::SRenderData renderData{.tex = original.texture,
+                                          .box = {transformed, Vector2D{original.w * zoom, original.h * zoom}},
+                                          .a = original.alpha,
+                                          .overallA = original.fadeAlpha,
+                                          .round = original.dontRound ? 0 : original.rounding,
+                                          .roundingPower = original.roundingPower,
+                                          .surface = original.surface,
+                                          .wrapX = original.wrapX,
+                                          .wrapY = original.wrapY,
+                                          .discardMode = original.discardMode,
+                                          .discardOpacity = original.discardOpacity,
+                                          .currentLS = original.pLS};
+  if (original.clipBox.w > 0.0 && original.clipBox.h > 0.0) {
+    const auto clipPosition = transformPoint({original.clipBox.x, original.clipBox.y}, geometry, board->second);
+    renderData.clipBox = {clipPosition, Vector2D{original.clipBox.w * zoom, original.clipBox.h * zoom}};
+  }
+  renderer->drawElement(makeShared<CTexPassElement>(std::move(renderData)), damage);
 }
 
 std::optional<size_t> jsonFieldValue(const std::string& json,
