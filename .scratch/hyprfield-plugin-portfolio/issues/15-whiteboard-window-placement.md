@@ -21,4 +21,5 @@
 - Implemented validated grid and floating placement through the native Lua API, including deterministic monitor-relative geometry, rectangular spans, single-slot swaps, client workspace movement, focus, persistence, and geometry dispatch.
 - Added pinned Hyprland event-bus cleanup for window close, monitor removal, and workspace removal, with offline host-harness event simulation.
 - Placement and configuration failures restore plugin records and prior geometry where compositor dispatch can fail; swaps compensate for partial dispatch failure.
+- Placement is intentionally runtime-only; do not reintroduce plugin-owned persistence for transient Hyprland client identities.
 - Verified with `just format`, `just tidy`, a successful build, and the full CTest suite.

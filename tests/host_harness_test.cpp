@@ -180,31 +180,17 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(!lost.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
   lost.unload();
 
-  hyprfield::testing::HostHarness persisted;
-  persisted.setMonitor("DP-1");
-  persisted.setWorkspace(42, "DP-1");
-  persisted.setClient("address:persisted", 42, "DP-1");
-  persisted.setFunction("IHyprRenderer::renderWorkspaceWindows(PHLMONITOR, PHLWORKSPACE, Time::steady_tp const&)");
-  persisted.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
-  expect(persisted.loadPlugin(plugin_path, "0.1"));
-  expect(persisted.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
-  expect(
-      persisted.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:persisted"}));
-  expect(persisted.invokeLua("whiteboard", "save", std::vector<std::string>{}));
-  persisted.unload();
-
-  hyprfield::testing::HostHarness restored;
-  restored.setMonitor("DP-1");
-  restored.setWorkspace(42, "DP-1");
-  restored.setClient("address:persisted", 42, "DP-1");
-  restored.setFunction("IHyprRenderer::renderWorkspaceWindows(PHLMONITOR, PHLWORKSPACE, Time::steady_tp const&)");
-  restored.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
-  expect(restored.loadPlugin(plugin_path, "0.1"));
-  expect(restored.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
-  // Client registrations are runtime handles and are intentionally discarded
-  // when the plugin unloads; board/camera state remains persisted.
-  expect(!restored.invokeLua("whiteboard", "clientActive", "address:persisted"));
-  restored.unload();
+  hyprfield::testing::HostHarness fresh;
+  fresh.setMonitor("DP-1");
+  fresh.setWorkspace(42, "DP-1");
+  fresh.setClient("address:fresh", 42, "DP-1");
+  fresh.setFunction("IHyprRenderer::renderWorkspaceWindows(PHLMONITOR, PHLWORKSPACE, Time::steady_tp const&)");
+  fresh.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
+  expect(fresh.loadPlugin(plugin_path, "0.1"));
+  expect(fresh.invokeLua("whiteboard", "activate", std::vector<std::string>{"DP-1", "42"}));
+  expect(fresh.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:fresh"}));
+  expect(!fresh.invokeLua("whiteboard", "save", std::vector<std::string>{}));
+  fresh.unload();
 }
 
 }  // namespace

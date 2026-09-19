@@ -29,4 +29,5 @@ The existing HyprDimension implementation is a partial command/state scaffold. I
 - Implemented the monitor/workspace board model behind the public `hl.plugin.whiteboard` API with compositor-side workspace ownership validation and fail-closed rejection.
 - Added stable client identity registration, duplicate and stale-client rejection, explicit client close/deactivate cleanup, bounded normal/management zoom state, and separate persisted board metadata.
 - Extended the offline host harness to model client identity and persistence/reload behavior without contacting a running compositor.
+- Superseded by the runtime-only policy: whiteboard board, camera, and client placement state must not be serialized by the plugin; reboot/reload starts with no stale client records and callers must register live clients again.
 - Verified with `just format`, `just tidy`, a successful build, and the full CTest suite. Commits: `663b3d0` and `ddecb33`.

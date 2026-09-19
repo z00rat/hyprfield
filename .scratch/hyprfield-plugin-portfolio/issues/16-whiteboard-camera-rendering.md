@@ -10,7 +10,7 @@
 
 - [x] Zoom values are validated and clamped; below 0.9x is reported as management mode and 1x is normal mode.
 - [x] The canvas and placed clients visibly scale and pan together using monitor-local camera coordinates.
-- [x] Camera movement is bounded, stable, and persisted without changing client ownership or authoritative Wayland geometry.
+- [x] Camera movement is bounded and stable for the active session without changing client ownership or authoritative Wayland geometry.
 - [x] Returning to 1x removes the render transform and restores native geometry; ordinary input remains delegated and popups stay in the workspace pass.
 - [x] Render damage is requested for the assigned monitor only.
 - [x] Renderer compatibility is pinned and missing renderer/visibility seams fail closed with a compatibility notification.
@@ -26,3 +26,5 @@
 ## Answer
 
 Issue 16 is complete: bounded camera rendering, 0.9x management-mode reporting, signed offscreen composition, complete window-pass transforms, native-geometry preservation, monitor-relative damage, and fail-closed renderer compatibility are implemented and verified by the offline harness plus the live ten-window walkthrough.
+
+- Persistence was intentionally removed: camera state, board assignments, and client placements are runtime-only; the plugin no longer creates or reads `whiteboard.state`, and the `save` Lua API was removed to avoid stale transient client identities after reboot.

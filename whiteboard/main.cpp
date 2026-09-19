@@ -2,7 +2,6 @@
 #include <cctype>
 #include <cmath>
 #include <cstdint>
-#include <cstdlib>
 #include <exception>
 #include <filesystem>
 #include <format>
@@ -17,7 +16,6 @@
 #include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -116,18 +114,9 @@ void renderWorkspaceWindowsHook(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE
 void mouseMovedHook(CInputManager*, IPointer::SMotionEvent);
 bool visibleOnMonitorHook(Desktop::View::CWindow*, PHLMONITOR);
 void updateCamera(Board&);
-void persist();
 bool jsonClientBelongsToBoard(const std::string&, std::string_view, std::string_view, int);
 
 std::string invokeDispatcher(std::string_view expression);
-
-std::filesystem::path statePath() {
-  const char* stateHome = std::getenv("XDG_STATE_HOME");
-  const auto root = stateHome == nullptr || std::string_view{stateHome}.empty()
-                        ? std::filesystem::path{std::getenv("HOME") == nullptr ? "." : std::getenv("HOME")}
-                        : std::filesystem::path{stateHome};
-  return root / "hyprfield" / "whiteboard.state";
-}
 
 void debugLog(std::string_view message) {
   std::error_code error;
@@ -257,7 +246,6 @@ void damageBoard(const Board& board) {
   if (g_pHyprRenderer == nullptr)
     return;
   g_pHyprRenderer->damageBox(board.geometry.x, board.geometry.y, board.geometry.width, board.geometry.height);
-  persist();
 }
 
 CanvasBounds canvasBounds(const Board& board) {
@@ -1244,137 +1232,10 @@ int managementLua(lua_State* state) {
   const auto board = monitorValue == nullptr || !isWorkspace
                          ? std::optional<std::reference_wrapper<Board>>{}
                          : findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
-  lua_pushboolean(state, board && board->get().zoom < kManagementThreshold);
-  return 1;
-}
-
-void persist() {
-  std::error_code error;
-  std::filesystem::create_directories(statePath().parent_path(), error);
-  std::ofstream state{statePath()};
-  if (!state)
-    return;
-  for (const auto& [_, board] : activeBoards) {
-    state << board.monitor << '\t' << board.workspace << '\t' << board.zoom << '\t' << board.pan.x << '\t'
-          << board.pan.y << '\n';
-    state << "grid\t" << board.workspace << '\t' << board.grid.rows << '\t' << board.grid.columns << '\t'
-          << board.grid.gap << '\t' << board.grid.margin << '\t' << board.grid.openingLayer << '\n';
-    for (const auto& [identity, placement] : board.clients)
-      state << "client\t" << board.workspace << '\t' << identity << '\t' << placement.layer << '\t' << placement.row
-            << '\t' << placement.column << '\t' << placement.rowSpan << '\t' << placement.columnSpan << '\n';
-  }
-}
-
-void restore() {
-  std::ifstream state{statePath()};
-  if (!state)
-    return;
-  std::string line;
-  while (std::getline(state, line)) {
-    const auto first = line.find('\t');
-    const auto second = line.find('\t', first + 1);
-    if (first == std::string::npos || second == std::string::npos)
-      continue;
-    if (line.starts_with("client\t")) {
-      try {
-        const auto workspace = std::stoi(line.substr(first + 1, second - first - 1));
-        const auto board = activeBoards.find(workspace);
-        const auto fields = line.substr(second + 1);
-        const auto fieldEnd = fields.find('\t');
-        const auto identity = fields.substr(0, fieldEnd);
-        if (board != activeBoards.end() && !identity.empty()
-            && jsonClientBelongsToBoard(
-                HyprlandAPI::invokeHyprctlCommand("clients", "", "j"), identity, board->second.monitor, workspace)) {
-          Board::Placement placement;
-          if (fieldEnd != std::string::npos) {
-            const auto values = fields.substr(fieldEnd + 1);
-            const auto next = [&values](size_t from) { return values.find('\t', from); };
-            const auto layerEnd = next(0);
-            placement.layer = values.substr(0, layerEnd);
-            size_t cursor = layerEnd == std::string::npos ? values.size() : layerEnd + 1;
-            const auto read = [&values, &cursor, &next]() {
-              const auto end = next(cursor);
-              const auto value =
-                  std::stoi(values.substr(cursor, end == std::string::npos ? values.size() - cursor : end - cursor));
-              cursor = end == std::string::npos ? values.size() : end + 1;
-              return value;
-            };
-            if (layerEnd != std::string::npos)
-              placement.row = read(), placement.column = read(), placement.rowSpan = read(),
-              placement.columnSpan = read();
-          }
-          board->second.clients.emplace(identity, placement);
-          recomputeCanvasBounds(board->second);
-          if (placement.layer == "grid")
-            setGeometry(board->second, board->second.clients.at(identity), board->second.monitor);
-        }
-      } catch (const std::exception&) {
-        report("ignored invalid client persistence record");
-      }
-      continue;
-    }
-    if (line.starts_with("grid\t")) {
-      try {
-        const auto workspace = std::stoi(line.substr(first + 1, second - first - 1));
-        const auto board = activeBoards.find(workspace);
-        if (board != activeBoards.end()) {
-          const auto values = line.substr(second + 1);
-          std::vector<std::string> fields;
-          size_t cursor = 0;
-          while (cursor <= values.size()) {
-            const auto end = values.find('\t', cursor);
-            fields.push_back(values.substr(cursor, end == std::string::npos ? values.size() - cursor : end - cursor));
-            if (end == std::string::npos)
-              break;
-            cursor = end + 1;
-          }
-          if (fields.size() == 5 && std::stoi(fields[0]) > 0 && std::stoi(fields[1]) > 0 && std::stoi(fields[2]) >= 0
-              && std::stoi(fields[3]) >= 0 && (fields[4] == "grid" || fields[4] == "floating"))
-            board->second.grid = {.rows = std::stoi(fields[0]),
-                                  .columns = std::stoi(fields[1]),
-                                  .gap = std::stoi(fields[2]),
-                                  .margin = std::stoi(fields[3]),
-                                  .openingLayer = fields[4]};
-        }
-      } catch (const std::exception&) {
-        report("ignored invalid grid persistence record");
-      }
-      continue;
-    }
-    try {
-      const auto workspace = std::stoi(line.substr(first + 1, second - first - 1));
-      const auto values = line.substr(second + 1);
-      std::stringstream fields{values};
-      std::string zoomValue;
-      std::string panXValue;
-      std::string panYValue;
-      std::getline(fields, zoomValue, '\t');
-      std::getline(fields, panXValue, '\t');
-      std::getline(fields, panYValue, '\t');
-      const auto zoom = std::stof(zoomValue);
-      const auto monitor = line.substr(0, first);
-      if (jsonContainsMonitor(HyprlandAPI::invokeHyprctlCommand("monitors", "", "j"), monitor)
-          && jsonContainsWorkspace(HyprlandAPI::invokeHyprctlCommand("workspaces", "", "j"), workspace, monitor)) {
-        auto [board, inserted] =
-            activeBoards.emplace(workspace,
-                                 Board{.monitor = monitor,
-                                       .workspace = workspace,
-                                       .zoom = boundedZoom(zoom),
-                                       .pan = Vector2D{panXValue.empty() ? 0.0 : std::stof(panXValue),
-                                                       panYValue.empty() ? 0.0 : std::stof(panYValue)}});
-        static_cast<void>(inserted);
-        board->second.geometry = monitorGeometry(monitor);
-      }
-    } catch (const std::exception&) {
-      report("ignored invalid board persistence record");
-    }
-  }
-}
-
-int saveLua(lua_State* state) {
-  static_cast<void>(state);
-  persist();
-  lua_pushboolean(state, true);
+  const auto effectiveZoom = board && board->get().cameraAnimating ? board->get().targetZoom
+                             : board                               ? board->get().zoom
+                                                                   : 1.0F;
+  lua_pushboolean(state, effectiveZoom < kManagementThreshold);
   return 1;
 }
 
@@ -1389,7 +1250,6 @@ int deactivateLua(lua_State* state) {
   if (!board)
     return activationFailure(state, "board is not active");
   activeBoards.erase(static_cast<int>(workspace));
-  persist();
   lua_pushboolean(state, true);
   return 1;
 }
@@ -1451,13 +1311,11 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "setZoom", setZoomLua)
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "setCamera", setCameraLua)
       || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "normal", normalLua)
-      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "management", managementLua)
-      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "save", saveLua)) {
+      || !HyprlandAPI::addLuaFunction(pluginHandle, "whiteboard", "management", managementLua)) {
     report("failed to register workspace model API");
     PLUGIN_EXIT();
     return {};
   }
-  restore();
   installLifecycleListeners();
   HyprlandAPI::addNotification(pluginHandle,
                                "[whiteboard] workspace model ready; camera renderer active",
@@ -1471,11 +1329,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
 APICALL EXPORT void PLUGIN_EXIT() {
   debugLog("plugin exit boardCount=" + std::to_string(activeBoards.size()));
-  // Client registrations are runtime handles, not durable board state. Keeping
-  // them across an unload makes the next plugin load reject the same windows.
-  for (auto& [_, board] : activeBoards)
-    board.clients.clear();
-  persist();
   for (auto* hook : hooks)
     HyprlandAPI::removeFunctionHook(pluginHandle, hook);
   hooks.clear();
