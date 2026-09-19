@@ -254,6 +254,14 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
     return;
   }
 
+  // Preserve Hyprland's ordinary surface path exactly at 1x. The explicit
+  // texture pass is only needed while the camera is actually transformed.
+  if (boundedZoom(board->second.zoom) == 1.0F) {
+    if (rendererHook != nullptr && rendererHook->m_original != nullptr)
+      reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
+    return;
+  }
+
   ++transformedRenders;
   const auto& geometry = board->second.geometry;
   const auto original = element->m_data;
