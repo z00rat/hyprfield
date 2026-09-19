@@ -208,11 +208,17 @@ end
 end
 
 if test $result -eq 0
+    set -l grid_rows_for_clients 0 0 0 0 1 1
+    set -l grid_columns_for_clients 0 1 2 3 1 3
+    set -l grid_row_spans 2 1 1 1 1 1
+    set -l grid_column_spans 1 1 1 1 2 1
     set -l index 0
     for address in $test_addresses
-        set -l row (math "floor($index / 4)")
-        set -l column (math "$index % 4")
-        if not whiteboard_dispatch "function() hl.plugin.whiteboard.placeGrid('$monitor', $workspace, '$address', $row, $column, 1, 1) end"
+        set -l row $grid_rows_for_clients[(math "$index + 1")]
+        set -l column $grid_columns_for_clients[(math "$index + 1")]
+        set -l row_span $grid_row_spans[(math "$index + 1")]
+        set -l column_span $grid_column_spans[(math "$index + 1")]
+        if not whiteboard_dispatch "function() hl.plugin.whiteboard.placeGrid('$monitor', $workspace, '$address', $row, $column, $row_span, $column_span) end"
             echo "Could not place window $address in the grid."
             set result 1
             break
