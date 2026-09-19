@@ -193,8 +193,17 @@ float boundedZoom(float zoom) {
 
 Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
   const auto zoom = boundedZoom(board.zoom);
-  const auto maximum = Vector2D{geometry.width * (1.0F - zoom) / 2.0F, geometry.height * (1.0F - zoom) / 2.0F};
-  return {std::clamp(board.pan.x, -maximum.x, maximum.x), std::clamp(board.pan.y, -maximum.y, maximum.y)};
+  const auto contentWidth = geometry.width - board.grid.margin * 2 - board.grid.gap * (board.grid.columns - 1);
+  const auto columnEdge = [contentWidth, &board](int column) {
+    return column * contentWidth / board.grid.columns + column * board.grid.gap;
+  };
+  const auto canvasWidth = board.grid.margin * 2 + columnEdge(board.grid.canvasColumns) - board.grid.gap;
+  const auto center = Vector2D{geometry.width / 2.0, geometry.height / 2.0};
+  const auto minimum = Vector2D{-center.x * (1.0F - zoom), -center.y * (1.0F - zoom)};
+  const auto maximum = Vector2D{geometry.width - (center.x + (canvasWidth - center.x) * zoom),
+                                geometry.height - (center.y + (geometry.height - center.y) * zoom)};
+  return {std::clamp(board.pan.x, std::min(maximum.x, minimum.x), std::max(maximum.x, minimum.x)),
+          std::clamp(board.pan.y, std::min(maximum.y, minimum.y), std::max(maximum.y, minimum.y))};
 }
 
 Vector2D transformPoint(const Vector2D& point, const MonitorGeometry& geometry, const Board& board) {
