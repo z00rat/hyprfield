@@ -99,7 +99,8 @@ bool jsonClientBelongsToBoard(const std::string&, std::string_view, std::string_
 std::string invokeDispatcher(std::string_view expression);
 
 std::string invokeLegacyDispatcher(std::string_view dispatcher, std::string_view arguments) {
-  return HyprlandAPI::invokeHyprctlCommand("dispatch", std::string{dispatcher} + " " + std::string{arguments});
+  const auto command = std::string{dispatcher} + " " + std::string{arguments};
+  return HyprlandAPI::invokeHyprctlCommand("dispatch", "\"" + command + "\"");
 }
 
 std::filesystem::path statePath() {
