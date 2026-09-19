@@ -1203,6 +1203,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
 APICALL EXPORT void PLUGIN_EXIT() {
   debugLog("plugin exit boardCount=" + std::to_string(activeBoards.size()));
+  // Client registrations are runtime handles, not durable board state. Keeping
+  // them across an unload makes the next plugin load reject the same windows.
+  for (auto& [_, board] : activeBoards)
+    board.clients.clear();
   persist();
   for (auto* hook : hooks)
     HyprlandAPI::removeFunctionHook(pluginHandle, hook);

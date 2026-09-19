@@ -193,7 +193,9 @@ void verify_whiteboard(const std::string& plugin_path) {
   restored.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(restored.loadPlugin(plugin_path, "0.1"));
   expect(restored.invokeLua("whiteboard", "active", std::vector<std::string>{"DP-1", "42"}));
-  expect(restored.invokeLua("whiteboard", "clientActive", "address:persisted"));
+  // Client registrations are runtime handles and are intentionally discarded
+  // when the plugin unloads; board/camera state remains persisted.
+  expect(!restored.invokeLua("whiteboard", "clientActive", "address:persisted"));
   restored.unload();
 }
 
