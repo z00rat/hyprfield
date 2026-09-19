@@ -211,6 +211,8 @@ end
 
 set -l window_count (count $board_addresses)
 set -l pan_distance (math "$window_count * 400")
+echo "Including $window_count non-fullscreen windows; none will be closed or removed."
+echo "Fullscreen windows are left untouched for safety."
 set -l grid_rows 2
 set -l grid_columns 4
 if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, $grid_columns, 2, 2, 'grid') end"
@@ -250,6 +252,8 @@ end
 if test $result -eq 0
     echo
     echo "SUCCESS: Whiteboard placed all active windows."
+    echo "Expected ordinary grid: all $window_count tested windows are present, floating, and non-overlapping."
+    echo "Expected ordinary grid sizes: the central 2x4 layout uses native 1x geometry."
     echo "Holding the ordinary grid for 5 seconds..."
     sleep 5
     snapshot_grid "ordinary grid" "$workspace"
@@ -257,6 +261,7 @@ end
 
 if test $result -eq 0
     echo "Panning the 1x whiteboard viewport right..."
+    echo "Expected: every tested window moves together; sizes and client count stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -$pan_distance, 0) end"
         echo "Could not pan right."
         set result 1
@@ -267,6 +272,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport left..."
+    echo "Expected: windows move to the opposite side of the canvas; sizes stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, $pan_distance, 0) end"
         echo "Could not pan left."
         set result 1
@@ -277,6 +283,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport up..."
+    echo "Expected: the surrounding shelf becomes visible; sizes stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, $pan_distance) end"
         echo "Could not pan up."
         set result 1
@@ -287,6 +294,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport down..."
+    echo "Expected: the canvas returns toward the central grid; sizes stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -$pan_distance) end"
         echo "Could not pan down."
         set result 1
@@ -296,6 +304,7 @@ end
 
 if test $result -eq 0
     echo "Restoring the ordinary viewport..."
+    echo "Expected restored-origin snapshot: it matches the ordinary-grid snapshot exactly."
     echo
     sleep 2
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 0) end"
