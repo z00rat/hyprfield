@@ -7,11 +7,8 @@ extern "C" {
 }
 
 #include <algorithm>
-#include <hyprland/src/desktop/state/WindowState.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
-#include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/render/ElementRenderer.hpp>
@@ -36,35 +33,6 @@ UP<CMonitorStateTracker>& monitorState() {
 }
 
 }  // namespace State
-
-namespace Desktop {
-
-UP<CWindowState>& windowState() {
-  static UP<CWindowState> state;
-  return state;
-}
-
-const std::vector<PHLWINDOW>& CWindowState::windows() const {
-  static const std::vector<PHLWINDOW> windows;
-  return windows;
-}
-
-namespace View {
-
-SP<Layout::ITarget> CWindow::layoutTarget() {
-  return nullptr;
-}
-
-}  // namespace View
-
-}  // namespace Desktop
-
-namespace Layout {
-
-void ITarget::setPositionGlobal(const CBox&, uint8_t) {}
-void ITarget::warpPositionSize() {}
-
-}  // namespace Layout
 
 namespace {
 

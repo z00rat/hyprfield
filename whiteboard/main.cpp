@@ -9,10 +9,6 @@
 #include <format>
 #include <fstream>
 #include <functional>
-#include <hyprland/src/Compositor.hpp>
-#include <hyprland/src/desktop/state/WindowState.hpp>
-#include <hyprland/src/desktop/view/Window.hpp>
-#include <hyprland/src/layout/target/Target.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
@@ -473,21 +469,6 @@ void setGeometry(Board& board, Board::Placement& placement, std::string_view) {
 }
 
 bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
-  if (placement.layer == "grid" && Desktop::windowState() != nullptr) {
-    const auto window = std::ranges::find_if(Desktop::windowState()->windows(), [identity](const auto& candidate) {
-      return candidate != nullptr && std::format("0x{:x}", reinterpret_cast<uintptr_t>(candidate.get())) == identity;
-    });
-    if (window != Desktop::windowState()->windows().end() && *window != nullptr) {
-      const auto target = (*window)->layoutTarget();
-      if (target != nullptr) {
-        target->setPositionGlobal(CBox{{static_cast<double>(placement.x), static_cast<double>(placement.y)},
-                                       {static_cast<double>(placement.width), static_cast<double>(placement.height)}},
-                                  Layout::TARGET_UPDATE_NO_CLIENT_CONFIGURE);
-        target->warpPositionSize();
-        return true;
-      }
-    }
-  }
   const auto address = identity.starts_with("address:") ? std::string{identity} : "address:" + std::string{identity};
   const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "", "j");
   const auto clientValue = jsonStringFieldPosition(clients, "address", identity);
