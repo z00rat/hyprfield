@@ -131,7 +131,7 @@ void verify_whiteboard(const std::string& plugin_path) {
       "whiteboard", "configureGrid", std::vector<std::string>{"DP-1", "42", "2", "4", "10", "20", "grid"}));
   expect(model.invokeLua(
       "whiteboard", "placeGrid", std::vector<std::string>{"DP-1", "42", "address:one", "1", "3", "1", "1"}));
-  expect(!model.invokeLua(
+  expect(model.invokeLua(
       "whiteboard", "placeGrid", std::vector<std::string>{"DP-1", "42", "address:one", "2", "0", "1", "1"}));
   expect(model.invokeLua("whiteboard", "setLayer", std::vector<std::string>{"DP-1", "42", "address:one", "floating"}));
   expect(model.invokeLua("whiteboard", "setLayer", std::vector<std::string>{"DP-1", "42", "address:one", "grid"}));

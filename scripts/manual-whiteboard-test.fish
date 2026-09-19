@@ -210,6 +210,7 @@ if test $result -eq 0
 end
 
 set -l window_count (count $board_addresses)
+set -l pan_distance (math "$window_count * 400")
 set -l grid_rows 2
 set -l grid_columns 4
 if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, $grid_columns, 2, 2, 'grid') end"
@@ -230,13 +231,10 @@ if test $result -eq 0
             set row_span $grid_row_spans[(math "$index + 1")]
             set column_span $grid_column_spans[(math "$index + 1")]
         else
-            if test $index -eq 4
-                set row -1
-                set column -1
-            else
-                set row 2
-                set column 4
-            end
+            # Keep every additional client on a unique virtual shelf above
+            # the visible grid. Negative rows/columns are valid canvas space.
+            set row -1
+            set column (math "$index - 5")
             set row_span 1
             set column_span 1
         end
@@ -259,7 +257,7 @@ end
 
 if test $result -eq 0
     echo "Panning the 1x whiteboard viewport right..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -350, 0) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -$pan_distance, 0) end"
         echo "Could not pan right."
         set result 1
     end
@@ -269,7 +267,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport left..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 350, 0) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, $pan_distance, 0) end"
         echo "Could not pan left."
         set result 1
     end
@@ -279,7 +277,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport up..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 350) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, $pan_distance) end"
         echo "Could not pan up."
         set result 1
     end
@@ -289,7 +287,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport down..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -350) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -$pan_distance) end"
         echo "Could not pan down."
         set result 1
     end

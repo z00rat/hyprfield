@@ -792,9 +792,6 @@ int configureGridLua(lua_State* state) {
   if (margin * 2 + gap * (columns - 1) >= monitorGeometry(monitorValue).width
       || margin * 2 + gap * (rows - 1) >= monitorGeometry(monitorValue).height)
     return placementFailure(state, "grid configuration does not fit monitor");
-  for (const auto& [_, placement] : board->get().clients)
-    if (placement.layer == "grid" && placement.row + placement.rowSpan > rows)
-      return placementFailure(state, "grid configuration would invalidate placement");
   auto& grid = board->get().grid;
   const auto previousGrid = grid;
   const auto previousPlacements = board->get().clients;
@@ -843,8 +840,6 @@ int placeGridLua(lua_State* state) {
   auto found = board->get().clients.find(identity);
   if (found == board->get().clients.end())
     return placementFailure(state, "client identity was not registered");
-  if (row + rowSpan > board->get().grid.rows)
-    return placementFailure(state, "grid placement is out of bounds");
   auto& target = found->second;
   if (rowSpan == 1 && columnSpan == 1) {
     for (auto& [otherIdentity, other] : board->get().clients) {
@@ -924,8 +919,6 @@ int setLayerLua(lua_State* state) {
                       found->second.rowSpan,
                       found->second.columnSpan))
       return placementFailure(state, "grid placement is occupied");
-    if (found->second.row + found->second.rowSpan > board->get().grid.rows)
-      return placementFailure(state, "grid placement is out of bounds");
     recomputeCanvasBounds(board->get());
     found->second.layer = "grid";
     setGeometry(board->get(), found->second, std::string_view{monitorValue, monitorLength});
