@@ -270,7 +270,7 @@ end
 
 if test $result -eq 0
     echo "Zooming the whiteboard to 0.9x for 3 seconds..."
-    echo "Expected: the same windows remain present, their sizes shrink, and more surrounding canvas is visible."
+    echo "Expected: rendered windows appear smaller, while hyprctl client sizes stay native and unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.9, 0, 0) end"
         echo "Could not set 0.9x zoom."
         set result 1
@@ -291,7 +291,7 @@ end
 
 if test $result -eq 0
     echo "Zooming the whiteboard to 0.5x for 3 seconds..."
-    echo "Expected: the same windows remain present, approximately half-size, with more surrounding windows visible."
+    echo "Expected: rendered windows appear approximately half-size, while native client sizes stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.5, 0, 0) end"
         echo "Could not set 0.5x zoom."
         set result 1

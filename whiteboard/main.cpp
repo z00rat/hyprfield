@@ -279,11 +279,21 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
     return;
   }
 
-  // Panning changes client geometry through the layout seam. Keep Hyprland's
-  // ordinary surface renderer so a 1x pan never scales or otherwise rewrites
-  // the window surface.
+  const auto& placement = board->second.clients.at(identity);
+  const auto zoom = boundedZoom(board->second.zoom);
+  const auto projected = projectGeometry(board->second, placement.world);
+  const auto original = element->m_data;
+  if (zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0) {
+    const auto worldOrigin = Vector2D{placement.world.x, placement.world.y};
+    const auto relative = original.pos - worldOrigin;
+    element->m_data.pos = {projected.x + relative.x * zoom, projected.y + relative.y * zoom};
+    element->m_data.localPos = original.localPos * zoom;
+    element->m_data.w = original.w * zoom;
+    element->m_data.h = original.h * zoom;
+  }
   if (rendererHook != nullptr && rendererHook->m_original != nullptr)
     reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
+  element->m_data = original;
 }
 
 std::optional<size_t> jsonFieldValue(const std::string& json,
@@ -473,40 +483,14 @@ bool dispatchScreenGeometry(std::string_view identity, const Board::Geometry& ge
 }
 
 bool dispatchGeometry(const Board& board, std::string_view identity, const Board::Placement& placement) {
-  return dispatchScreenGeometry(identity, projectGeometry(board, placement.world));
-}
-
-bool dispatchPosition(std::string_view identity, int x, int y) {
-  const auto address = identity.starts_with("address:") ? std::string{identity} : "address:" + std::string{identity};
-  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(x) + ",y=" + std::to_string(y)
-                                     + ",relative=false,window=\"" + address + "\"})");
-  if (!move.starts_with("ok"))
-    debugLog("camera move failed identity=" + std::string{identity} + " response=" + move);
-  return move.starts_with("ok");
+  static_cast<void>(board);
+  return dispatchScreenGeometry(identity, placement.world);
 }
 
 bool applyCamera(Board& board, Vector2D pan, float zoom) {
-  const auto previousPan = board.pan;
-  const auto previousZoom = board.zoom;
   board.zoom = boundedZoom(zoom);
   board.pan = pan;
   board.pan = boundedPan(board, board.geometry);
-  std::vector<std::string> moved;
-  for (const auto& [identity, placement] : board.clients) {
-    if (placement.layer != "grid")
-      continue;
-    const auto projected = projectGeometry(board, placement.world);
-    moved.push_back(identity);
-    if (!dispatchScreenGeometry(identity, projected)) {
-      board.pan = previousPan;
-      board.zoom = previousZoom;
-      for (const auto& movedIdentity : moved) {
-        const auto& movedPlacement = board.clients.at(movedIdentity);
-        dispatchScreenGeometry(movedIdentity, projectGeometry(board, movedPlacement.world));
-      }
-      return false;
-    }
-  }
   return true;
 }
 
