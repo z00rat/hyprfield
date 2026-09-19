@@ -374,8 +374,12 @@ MonitorGeometry monitorGeometry(std::string_view monitor) {
   const auto name = jsonFieldValue(json, "name");
   if (!name || !jsonStringFieldEquals(json, "name", monitor))
     return {};
-  const auto object = json.substr(*name, json.find('}', *name) - *name);
+  const auto nextMonitor = json.find("\"name\"", *name + 1);
+  const auto object = json.substr(*name, nextMonitor == std::string::npos ? std::string::npos : nextMonitor - *name);
   const auto scale = std::max(1.0, jsonNumber(object, "scale", 1.0));
+  debugLog("monitor geometry monitor=" + std::string{monitor} + " scale=" + std::to_string(scale)
+           + " raw=" + std::to_string(jsonNumber(object, "width", 0.0)) + "x"
+           + std::to_string(jsonNumber(object, "height", 0.0)));
   return {.x = static_cast<int>(std::lround(jsonNumber(object, "x", 0.0))),
           .y = static_cast<int>(std::lround(jsonNumber(object, "y", 0.0))),
           .width = static_cast<int>(std::lround(jsonNumber(object, "width", 1920.0) / scale)),
