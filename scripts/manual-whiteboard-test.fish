@@ -173,7 +173,7 @@ end
 function snapshot_grid
     set -l snapshot_workspace $argv[2]
     echo "GRID SNAPSHOT: $argv[1]"
-    hyprctl -j clients | jq --arg workspace "$snapshot_workspace" \
+    hyprctl -j clients | jq -c --arg workspace "$snapshot_workspace" \
         '[.[] | select((.workspace.id | tostring) == $workspace) | {address, at, size, floating}]'
 end
 
@@ -230,8 +230,13 @@ if test $result -eq 0
             set row_span $grid_row_spans[(math "$index + 1")]
             set column_span $grid_column_spans[(math "$index + 1")]
         else
-            set row (math "-1 + (($index - 4) % 2)")
-            set column (math "-1 + floor(($index - 4) / 2)")
+            if test $index -eq 4
+                set row -1
+                set column -1
+            else
+                set row 2
+                set column 4
+            end
             set row_span 1
             set column_span 1
         end
