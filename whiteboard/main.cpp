@@ -287,13 +287,11 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
   }
 
   updateCamera(board->second);
-  const auto& placement = board->second.clients.at(identity);
   const auto zoom = boundedZoom(board->second.zoom);
-  const auto projected = projectGeometry(board->second, placement.world);
   const auto original = element->m_data;
-  const auto worldOrigin = Vector2D{placement.world.x, placement.world.y};
-  const auto relative = original.pos - worldOrigin;
-  const auto transformedPosition = Vector2D{projected.x + relative.x * zoom, projected.y + relative.y * zoom};
+  const auto monitorCenter = Vector2D{board->second.geometry.x + board->second.geometry.width / 2.0,
+                                      board->second.geometry.y + board->second.geometry.height / 2.0};
+  const auto transformedPosition = monitorCenter + (original.pos - monitorCenter) * zoom + board->second.pan;
   const auto transformedSize = Vector2D{original.w * zoom, original.h * zoom};
   const auto transformed = zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0;
   if (transformed) {
