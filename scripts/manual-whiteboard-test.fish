@@ -201,6 +201,16 @@ if test $result -eq 0
     end
 end
 
+if test $result -eq 0
+    for address in $test_addresses
+        if not whiteboard_dispatch "function() hl.plugin.whiteboard.setLayer('$monitor', $workspace, '$address', 'floating') end"
+            echo "Could not clear the default grid slot for $address."
+            set result 1
+            break
+        end
+    end
+end
+
 set -l window_count (count $test_addresses)
 set -l grid_rows 2
 set -l extra_count (math "$window_count - 4")
