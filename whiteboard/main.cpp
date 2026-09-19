@@ -8,6 +8,7 @@
 #include <format>
 #include <fstream>
 #include <functional>
+#include <hyprland/src/desktop/view/Window.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
@@ -44,11 +45,18 @@ struct CanvasBounds {
   double maxY = 0.0;
 };
 
+// Window decorations and shadows are rendered outside the client rectangle.
+// Keep those pixels in the offscreen canvas instead of clipping them at the
+// outermost registered client.
+constexpr double kCanvasRenderPadding = 128.0;
+
 constexpr std::string_view kPluginName = "whiteboard";
 constexpr std::string_view kRenderClass = "IHyprRenderer";
 constexpr std::string_view kRenderMethod = "renderWorkspaceWindows";
 constexpr std::string_view kInputClass = "CInputManager";
 constexpr std::string_view kInputMethod = "onMouseMoved";
+constexpr std::string_view kWindowClass = "CWindow";
+constexpr std::string_view kWindowVisibilityMethod = "visibleOnMonitor";
 
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
@@ -101,8 +109,12 @@ struct Board {
 std::unordered_map<int, Board> activeBoards;
 CFunctionHook* workspaceRenderHook = nullptr;
 CFunctionHook* inputHook = nullptr;
+CFunctionHook* windowVisibilityHook = nullptr;
+PHLMONITOR canvasCaptureMonitor;
+PHLWORKSPACE canvasCaptureWorkspace;
 void renderWorkspaceWindowsHook(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&);
 void mouseMovedHook(CInputManager*, IPointer::SMotionEvent);
+bool visibleOnMonitorHook(Desktop::View::CWindow*, PHLMONITOR);
 void updateCamera(Board&);
 void persist();
 bool jsonClientBelongsToBoard(const std::string&, std::string_view, std::string_view, int);
@@ -156,12 +168,14 @@ CFunctionHook* installHook(std::string_view className, std::string_view methodNa
            && match.demangled.contains(std::string{className} + "::" + std::string{methodName} + "(");
   });
   if (found == matches.end()) {
-    report("missing " + std::string{className} + "::" + std::string{methodName});
+    if (methodName != kWindowVisibilityMethod)
+      report("missing " + std::string{className} + "::" + std::string{methodName});
     return nullptr;
   }
 
-  const auto destination = methodName == kRenderMethod ? reinterpret_cast<const void*>(&renderWorkspaceWindowsHook)
-                                                       : reinterpret_cast<const void*>(&mouseMovedHook);
+  const auto destination = methodName == kRenderMethod  ? reinterpret_cast<const void*>(&renderWorkspaceWindowsHook)
+                           : methodName == kInputMethod ? reinterpret_cast<const void*>(&mouseMovedHook)
+                                                        : reinterpret_cast<const void*>(&visibleOnMonitorHook);
   auto* hook = HyprlandAPI::createFunctionHook(pluginHandle, found->address, destination);
   if (hook == nullptr || !hook->hook()) {
     report("failed to register " + std::string{className} + "::" + std::string{methodName});
@@ -257,6 +271,10 @@ CanvasBounds canvasBounds(const Board& board) {
     bounds.maxX = std::max(bounds.maxX, static_cast<double>(placement.world.x + placement.world.width));
     bounds.maxY = std::max(bounds.maxY, static_cast<double>(placement.world.y + placement.world.height));
   }
+  bounds.minX -= kCanvasRenderPadding;
+  bounds.minY -= kCanvasRenderPadding;
+  bounds.maxX += kCanvasRenderPadding;
+  bounds.maxY += kCanvasRenderPadding;
   return bounds;
 }
 
@@ -273,6 +291,17 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
   }
   if (inputHook != nullptr && inputHook->m_original != nullptr)
     reinterpret_cast<void (*)(CInputManager*, IPointer::SMotionEvent)>(inputHook->m_original)(input, event);
+}
+
+bool visibleOnMonitorHook(Desktop::View::CWindow* window, PHLMONITOR monitor) {
+  if (window != nullptr && monitor != nullptr && canvasCaptureMonitor == monitor && canvasCaptureWorkspace != nullptr
+      && window->m_workspace == canvasCaptureWorkspace)
+    return true;
+
+  if (windowVisibilityHook != nullptr && windowVisibilityHook->m_original != nullptr)
+    return reinterpret_cast<bool (*)(Desktop::View::CWindow*, PHLMONITOR)>(windowVisibilityHook->m_original)(window,
+                                                                                                             monitor);
+  return false;
 }
 
 void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
@@ -295,7 +324,10 @@ void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
   const auto scale = monitor->m_scale;
   const auto framebufferSize =
       Vector2D{std::ceil((bounds.maxX - bounds.minX) * scale), std::ceil((bounds.maxY - bounds.minY) * scale)};
-  const CRegion fullDamage{0.0, 0.0, framebufferSize.x, framebufferSize.y};
+  const CRegion canvasDamage{(bounds.minX - monitor->m_position.x) * scale,
+                             (bounds.minY - monitor->m_position.y) * scale,
+                             framebufferSize.x,
+                             framebufferSize.y};
 
   {
     auto guard = renderer->bindTempFB(framebuffer);
@@ -312,11 +344,11 @@ void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
     renderData.transformDamage = false;
     renderData.primarySurfaceUVTopLeft = Vector2D(-1, -1);
     renderData.primarySurfaceUVBottomRight = Vector2D(-1, -1);
-    renderData.damage = fullDamage;
-    renderData.finalDamage = fullDamage;
+    renderData.damage = canvasDamage;
+    renderData.finalDamage = canvasDamage;
 
     renderer->draw(CClearPassElement::SClearData{CHyprColor(0, 0, 0, 0)});
-    pass.render(fullDamage);
+    pass.render(canvasDamage);
   }
 
   renderData.damage = oldDamage;
@@ -389,8 +421,12 @@ void renderWorkspaceWindowsHook(Render::IHyprRenderer* renderer,
   Render::CRenderPass windowPass;
   {
     auto redirect = renderer->redirectPass(&windowPass);
+    canvasCaptureMonitor = monitor;
+    canvasCaptureWorkspace = workspace;
     reinterpret_cast<void (*)(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&)>(
         workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
+    canvasCaptureWorkspace.reset();
+    canvasCaptureMonitor.reset();
   }
 
   renderPassIntoFramebuffer(renderer, windowPass, framebuffer, monitor, bounds);
@@ -1379,6 +1415,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
   workspaceRenderHook = installHook(kRenderClass, kRenderMethod);
   inputHook = installHook(kInputClass, kInputMethod);
+  windowVisibilityHook = installHook(kWindowClass, kWindowVisibilityMethod);
   if (workspaceRenderHook == nullptr || inputHook == nullptr) {
     for (auto* hook : hooks)
       HyprlandAPI::removeFunctionHook(pluginHandle, hook);
@@ -1444,6 +1481,9 @@ APICALL EXPORT void PLUGIN_EXIT() {
   hooks.clear();
   workspaceRenderHook = nullptr;
   inputHook = nullptr;
+  windowVisibilityHook = nullptr;
+  canvasCaptureWorkspace.reset();
+  canvasCaptureMonitor.reset();
   lifecycleListeners.clear();
   activeBoards.clear();
   pluginHandle = nullptr;

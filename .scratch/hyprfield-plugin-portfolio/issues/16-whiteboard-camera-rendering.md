@@ -15,3 +15,9 @@
 - [ ] Render damage is requested only for affected assigned monitors; ordinary workspaces and other monitors receive no transform or stale damage.
 - [ ] Unsupported or failed renderer integration leaves the board in ordinary Hyprland presentation and reports failure.
 - [ ] Offline seam tests and an explicit live walkthrough prove both transformed and restored states.
+
+## Comments
+
+- The renderer slice is implemented and live-confirmed: complete workspace passes are captured into a signed, padded offscreen canvas so borders, shadows, blur, decorations, surfaces, and subsurfaces transform together; 1x panning and zoomed views preserve native client geometry.
+- The capture path includes off-monitor workspace windows and uses monitor-relative pixel damage coordinates, including fractional-scale outputs, to avoid clipping.
+- This issue remains open because management-mode threshold/orchestration and pointer activation/focus behavior are not implemented; those remain in issues 17 and 18.
