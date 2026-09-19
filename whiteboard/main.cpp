@@ -98,6 +98,10 @@ bool jsonClientBelongsToBoard(const std::string&, std::string_view, std::string_
 
 std::string invokeDispatcher(std::string_view expression);
 
+std::string invokeLegacyDispatcher(std::string_view dispatcher, std::string_view arguments) {
+  return HyprlandAPI::invokeHyprctlCommand("dispatch", std::string{dispatcher} + " " + std::string{arguments});
+}
+
 std::filesystem::path statePath() {
   const char* stateHome = std::getenv("XDG_STATE_HOME");
   const auto root = stateHome == nullptr || std::string_view{stateHome}.empty()
@@ -480,19 +484,18 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
       client == std::string::npos
           ? std::string{}
           : clients.substr(client, objectEnd == std::string::npos ? std::string::npos : objectEnd - client);
-  const auto floating = object.contains("\"floating\":true") || object.contains("\"floating\": true");
-  if (!floating) {
+  if (!object.contains("\"floating\":true") && !object.contains("\"floating\": true")) {
     const auto floating = invokeDispatcher("hl.dsp.window.float({window=\"" + address + "\"})");
     if (!floating.starts_with("ok"))
       return false;
   }
-  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(placement.x) + ",y="
-                                     + std::to_string(placement.y) + ",relative = false,window=\"" + address + "\"})");
+  const auto move = invokeLegacyDispatcher(
+      "movewindowpixel", "exact " + std::to_string(placement.x) + " " + std::to_string(placement.y) + "," + address);
   if (!move.starts_with("ok"))
     return false;
-  const auto resize =
-      invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(placement.width)
-                       + ",y=" + std::to_string(placement.height) + ",relative = false,window=\"" + address + "\"})");
+  const auto resize = invokeLegacyDispatcher(
+      "resizewindowpixel",
+      "exact " + std::to_string(placement.width) + " " + std::to_string(placement.height) + "," + address);
   if (!resize.starts_with("ok"))
     debugLog("grid resize failed identity=" + std::string{identity} + " response=" + resize);
   return resize.starts_with("ok");
