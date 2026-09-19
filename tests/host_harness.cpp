@@ -81,6 +81,8 @@ UP<Render::CScopeGuard> Render::IHyprRenderer::bindTempFB(SP<Render::IFramebuffe
   return makeUnique<Render::CScopeGuard>([] {});
 }
 void Render::IHyprRenderer::draw(const CClearPassElement::SClearData&, const CRegion&) {}
+void Render::IHyprRenderer::setProjectionType(Render::eRenderProjectionType) {}
+void Render::IHyprRenderer::setProjectionType(const Vector2D&) {}
 SP<Render::IFramebuffer> Monitor::CMonitorResources::getUnusedWorkBuffer() {
   return nullptr;
 }
@@ -89,6 +91,9 @@ WP<Monitor::CMonitorResources> Monitor::CMonitor::resources() {
 }
 SP<Render::ITexture> Render::IFramebuffer::getTexture() {
   return nullptr;
+}
+bool Render::IFramebuffer::alloc(int, int, DRMFormat) {
+  return true;
 }
 CTexPassElement::CTexPassElement(SRenderData&& data) : m_data(std::move(data)) {}
 std::vector<UP<IPassElement>> IPassElement::draw() {

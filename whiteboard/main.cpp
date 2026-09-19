@@ -37,6 +37,13 @@ struct MonitorGeometry {
   int height = 1080;
 };
 
+struct CanvasBounds {
+  double minX = 0.0;
+  double minY = 0.0;
+  double maxX = 0.0;
+  double maxY = 0.0;
+};
+
 constexpr std::string_view kPluginName = "whiteboard";
 constexpr std::string_view kRenderClass = "IHyprRenderer";
 constexpr std::string_view kRenderMethod = "renderWorkspaceWindows";
@@ -239,6 +246,20 @@ void damageBoard(const Board& board) {
   persist();
 }
 
+CanvasBounds canvasBounds(const Board& board) {
+  CanvasBounds bounds{.minX = static_cast<double>(board.geometry.x),
+                      .minY = static_cast<double>(board.geometry.y),
+                      .maxX = static_cast<double>(board.geometry.x + board.geometry.width),
+                      .maxY = static_cast<double>(board.geometry.y + board.geometry.height)};
+  for (const auto& [_, placement] : board.clients) {
+    bounds.minX = std::min(bounds.minX, static_cast<double>(placement.world.x));
+    bounds.minY = std::min(bounds.minY, static_cast<double>(placement.world.y));
+    bounds.maxX = std::max(bounds.maxX, static_cast<double>(placement.world.x + placement.world.width));
+    bounds.maxY = std::max(bounds.maxY, static_cast<double>(placement.world.y + placement.world.height));
+  }
+  return bounds;
+}
+
 void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
   if (input != nullptr) {
     const auto cursor = input->getMouseCoordsInternal();
@@ -257,7 +278,8 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
 void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
                                Render::CRenderPass& pass,
                                SP<Render::IFramebuffer> framebuffer,
-                               PHLMONITOR monitor) {
+                               PHLMONITOR monitor,
+                               const CanvasBounds& bounds) {
   auto& renderData = renderer->m_renderData;
   const auto oldDamage = renderData.damage.copy();
   const auto oldFinalDamage = renderData.finalDamage.copy();
@@ -265,19 +287,29 @@ void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
   const auto oldSurface = renderData.surface;
   const auto oldClipBox = renderData.clipBox;
   const auto oldRenderModif = renderData.renderModif;
+  const auto oldProjectionType = renderData.projectionType;
+  const auto oldFbSize = renderData.fbSize;
+  const auto oldTransformDamage = renderData.transformDamage;
   const auto oldPrimarySurfaceUVTopLeft = renderData.primarySurfaceUVTopLeft;
   const auto oldPrimarySurfaceUVBottomRight = renderData.primarySurfaceUVBottomRight;
-  const CRegion fullDamage{0.0,
-                           0.0,
-                           static_cast<double>(sc<int>(monitor->m_transformedSize.x)),
-                           static_cast<double>(sc<int>(monitor->m_transformedSize.y))};
+  const auto scale = monitor->m_scale;
+  const auto framebufferSize =
+      Vector2D{std::ceil((bounds.maxX - bounds.minX) * scale), std::ceil((bounds.maxY - bounds.minY) * scale)};
+  const CRegion fullDamage{0.0, 0.0, framebufferSize.x, framebufferSize.y};
 
   {
     auto guard = renderer->bindTempFB(framebuffer);
+    renderData.fbSize = framebufferSize;
+    renderer->setProjectionType(Render::RPT_EXPORT);
+    renderer->setViewport(0, 0, sc<int>(framebufferSize.x), sc<int>(framebufferSize.y));
     renderData.currentWindow.reset();
     renderData.surface.reset();
     renderData.clipBox = {};
     renderData.renderModif = {};
+    renderData.renderModif.modifs.emplace_back(
+        Render::SRenderModifData::eRenderModifType::RMOD_TYPE_TRANSLATE,
+        Vector2D{(monitor->m_position.x - bounds.minX) * scale, (monitor->m_position.y - bounds.minY) * scale});
+    renderData.transformDamage = false;
     renderData.primarySurfaceUVTopLeft = Vector2D(-1, -1);
     renderData.primarySurfaceUVBottomRight = Vector2D(-1, -1);
     renderData.damage = fullDamage;
@@ -293,16 +325,24 @@ void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
   renderData.surface = oldSurface;
   renderData.clipBox = oldClipBox;
   renderData.renderModif = oldRenderModif;
+  renderData.fbSize = oldFbSize;
+  renderData.transformDamage = oldTransformDamage;
+  renderer->setProjectionType(oldProjectionType);
+  renderer->setViewport(0, 0, sc<int>(monitor->m_pixelSize.x), sc<int>(monitor->m_pixelSize.y));
   renderData.primarySurfaceUVTopLeft = oldPrimarySurfaceUVTopLeft;
   renderData.primarySurfaceUVBottomRight = oldPrimarySurfaceUVBottomRight;
 }
 
-CBox canvasOutputBox(const Board& board, PHLMONITOR monitor) {
+CBox canvasOutputBox(const Board& board, PHLMONITOR monitor, const CanvasBounds& bounds) {
   const auto zoom = boundedZoom(board.zoom);
-  const auto center = Vector2D{board.geometry.width / 2.0, board.geometry.height / 2.0};
-  const auto logicalPosition = center + (Vector2D{} - center) * zoom + board.pan;
-  const auto logicalSize = Vector2D{board.geometry.width * zoom, board.geometry.height * zoom};
-  return {logicalPosition * monitor->m_scale, logicalSize * monitor->m_scale};
+  const auto monitorCenter =
+      Vector2D{board.geometry.x + board.geometry.width / 2.0, board.geometry.y + board.geometry.height / 2.0};
+  const auto canvasCenter = Vector2D{(bounds.minX + bounds.maxX) / 2.0, (bounds.minY + bounds.maxY) / 2.0};
+  const auto logicalPosition = monitorCenter + (canvasCenter - monitorCenter) * zoom + board.pan;
+  const auto logicalSize = Vector2D{(bounds.maxX - bounds.minX) * zoom, (bounds.maxY - bounds.minY) * zoom};
+  return {(logicalPosition - Vector2D{monitor->m_position.x, monitor->m_position.y}) * monitor->m_scale
+              - logicalSize * (monitor->m_scale / 2.0),
+          logicalSize * monitor->m_scale};
 }
 
 void renderWorkspaceWindowsHook(Render::IHyprRenderer* renderer,
@@ -336,8 +376,11 @@ void renderWorkspaceWindowsHook(Render::IHyprRenderer* renderer,
     return;
   }
 
-  const auto framebuffer = monitor->resources()->getUnusedWorkBuffer();
-  if (!framebuffer) {
+  const auto bounds = canvasBounds(board->second);
+  const auto framebufferSize = Vector2D{std::ceil((bounds.maxX - bounds.minX) * monitor->m_scale),
+                                        std::ceil((bounds.maxY - bounds.minY) * monitor->m_scale)};
+  const auto framebuffer = renderer->createFB("whiteboard canvas");
+  if (!framebuffer || !framebuffer->alloc(sc<int>(framebufferSize.x), sc<int>(framebufferSize.y))) {
     reinterpret_cast<void (*)(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&)>(
         workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
     return;
@@ -350,10 +393,10 @@ void renderWorkspaceWindowsHook(Render::IHyprRenderer* renderer,
         workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
   }
 
-  renderPassIntoFramebuffer(renderer, windowPass, framebuffer, monitor);
+  renderPassIntoFramebuffer(renderer, windowPass, framebuffer, monitor, bounds);
   renderer->currentPass().add(makeUnique<CTexPassElement>(CTexPassElement::SRenderData{
       .tex = framebuffer->getTexture(),
-      .box = canvasOutputBox(board->second, monitor),
+      .box = canvasOutputBox(board->second, monitor, bounds),
       .a = 1.0F,
   }));
 }
