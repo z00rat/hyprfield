@@ -292,8 +292,10 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
   const auto original = element->m_data;
   const auto monitorCenter = Vector2D{board->second.geometry.x + board->second.geometry.width / 2.0,
                                       board->second.geometry.y + board->second.geometry.height / 2.0};
-  const auto transformedPosition = monitorCenter + (original.pos - monitorCenter) * zoom + board->second.pan;
-  const auto transformedSize = Vector2D{original.w * zoom, original.h * zoom};
+  const auto logicalPosition = monitorCenter + (original.pos - monitorCenter) * zoom + board->second.pan;
+  const auto logicalSize = Vector2D{original.w * zoom, original.h * zoom};
+  const auto transformedPosition = (logicalPosition - monitor->m_position) * monitor->m_scale;
+  const auto transformedSize = logicalSize * monitor->m_scale;
   const auto transformed = zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0;
   if (transformed) {
     const auto debugRender = ++transformedDebugRenders;
