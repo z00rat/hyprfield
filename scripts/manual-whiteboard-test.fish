@@ -193,18 +193,8 @@ end
 
 if test $result -eq 0
     for address in $test_addresses
-        if not whiteboard_dispatch "function() hl.plugin.whiteboard.registerClient('$monitor', $workspace, '$address') end"
+        if not whiteboard_dispatch "function() hl.plugin.whiteboard.registerClient('$monitor', $workspace, '$address', 'floating') end"
             echo "Could not register window $address."
-            set result 1
-            break
-        end
-    end
-end
-
-if test $result -eq 0
-    for address in $test_addresses
-        if not whiteboard_dispatch "function() hl.plugin.whiteboard.setLayer('$monitor', $workspace, '$address', 'floating') end"
-            echo "Could not clear the default grid slot for $address."
             set result 1
             break
         end

@@ -700,8 +700,11 @@ int registerClientLua(lua_State* state) {
             HyprlandAPI::invokeHyprctlCommand("clients", "", "j"), identity, monitor, static_cast<int>(workspace)))
       return activationFailure(state, "client workspace verification failed");
   }
+  const auto requestedLayer = luaL_optstring(state, 4, board->get().grid.openingLayer.c_str());
+  if (std::string_view{requestedLayer} != "grid" && std::string_view{requestedLayer} != "floating")
+    return activationFailure(state, "client layer must be grid or floating");
   auto& record = board->get().clients[identity];
-  record.layer = board->get().grid.openingLayer;
+  record.layer = requestedLayer;
   if (record.layer == "grid") {
     bool placed = false;
     for (int row = 0; row < board->get().grid.rows && !placed; ++row)
