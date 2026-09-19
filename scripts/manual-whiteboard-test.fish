@@ -82,12 +82,12 @@ for window in $original_windows
     set -l fields (string split \t -- $window)
     set -a test_addresses $fields[1]
 end
-if test (count $test_addresses) -lt 4
-    echo "At least four non-fullscreen windows are required for the rectangular grid test."
+if test (count $test_addresses) -lt 10
+    echo "At least ten non-fullscreen windows are required for the 10-window canvas test."
     exit 1
 end
-set -l board_addresses $test_addresses
-echo "Temporarily testing windows: $board_addresses"
+set -l board_addresses $test_addresses[1..10]
+echo "Temporarily testing exactly 10 windows: $board_addresses"
 
 function restore_windows
     echo "Restoring original window placement..."
@@ -234,25 +234,27 @@ if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whitebo
 end
 
 if test $result -eq 0
-    set -l grid_rows_for_clients 0 0 0 1
-    set -l grid_columns_for_clients 0 2 3 2
-    set -l grid_row_spans 2 1 1 1
-    set -l grid_column_spans 2 1 1 2
+    echo "Canvas layout:"
+    echo "                 E   F   G   H"
+    echo "             +---+---+---+---+"
+    echo "          I  | A A | B | C |  J"
+    echo "             | A A | D | D |"
+    echo "             +---+---+---+---+"
+    echo "Central: A=2x2, B/C=1x1, D=1x2; shelf: E-H above, I left, J right."
+
+    # A A B C
+    # A A D D
+    # E F G H above; I and J on the left/right shelf.
+    set -l grid_rows_for_clients 0 0 0 1 -1 -1 -1 -1 0 0
+    set -l grid_columns_for_clients 0 2 3 2 0 1 2 3 -1 4
+    set -l grid_row_spans 2 1 1 1 1 1 1 1 1 1
+    set -l grid_column_spans 2 1 1 2 1 1 1 1 1 1
     set -l index 0
     for address in $board_addresses
-        if test $index -lt 4
-            set row $grid_rows_for_clients[(math "$index + 1")]
-            set column $grid_columns_for_clients[(math "$index + 1")]
-            set row_span $grid_row_spans[(math "$index + 1")]
-            set column_span $grid_column_spans[(math "$index + 1")]
-        else
-            # Keep every additional client on a unique virtual shelf above
-            # the visible grid. Negative rows/columns are valid canvas space.
-            set row -1
-            set column (math "$index - 5")
-            set row_span 1
-            set column_span 1
-        end
+        set row $grid_rows_for_clients[(math "$index + 1")]
+        set column $grid_columns_for_clients[(math "$index + 1")]
+        set row_span $grid_row_spans[(math "$index + 1")]
+        set column_span $grid_column_spans[(math "$index + 1")]
         if not whiteboard_dispatch "function() hl.plugin.whiteboard.placeGrid('$monitor', $workspace, '$address', $row, $column, $row_span, $column_span) end"
             echo "Could not place window $address in the grid."
             set result 1
