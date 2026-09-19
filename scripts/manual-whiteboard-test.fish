@@ -259,7 +259,7 @@ end
 
 if test $result -eq 0
     echo "Panning the 1x whiteboard viewport right..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 350, 0) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -350, 0) end"
         echo "Could not pan right."
         set result 1
     end
@@ -269,7 +269,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport left..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -350, 0) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 350, 0) end"
         echo "Could not pan left."
         set result 1
     end
@@ -279,7 +279,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport up..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -350) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 350) end"
         echo "Could not pan up."
         set result 1
     end
@@ -289,7 +289,7 @@ end
 if test $result -eq 0
     sleep 2
     echo "Panning the 1x whiteboard viewport down..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 350) end"
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -350) end"
         echo "Could not pan down."
         set result 1
     end

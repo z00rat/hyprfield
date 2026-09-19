@@ -16,7 +16,6 @@
 #include <hyprland/src/render/ElementRenderer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/pass/SurfacePassElement.hpp>
-#include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 #include <optional>
 #include <sstream>
@@ -53,8 +52,6 @@ constexpr std::string_view kInputMethod = "onMouseMoved";
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
 std::vector<CHyprSignalListener> lifecycleListeners;
-std::atomic_uint64_t renderCalls = 0;
-std::atomic_uint64_t transformedRenders = 0;
 
 struct Board {
   std::string monitor;
@@ -211,15 +208,6 @@ Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
           std::clamp(board.pan.y, std::min(maximum.y, minimum.y), std::max(maximum.y, minimum.y))};
 }
 
-Vector2D transformPoint(const Vector2D& point, const MonitorGeometry& geometry, const Board& board) {
-  const auto zoom = boundedZoom(board.zoom);
-  const auto pan = boundedPan(board, geometry);
-  const auto origin = Vector2D{geometry.x, geometry.y};
-  const auto center = Vector2D{geometry.width / 2.0, geometry.height / 2.0};
-  const auto localPoint = point - origin;
-  return origin + center + (localPoint - center) * zoom + pan;
-}
-
 MonitorGeometry monitorGeometry(std::string_view monitor);
 
 void damageBoard(const Board& board) {
@@ -245,7 +233,6 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
 }
 
 void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement> weakElement, const CRegion& damage) {
-  const auto renderNumber = ++renderCalls;
   auto* element = weakElement.get();
   if (element == nullptr || element->m_data.pWindow == nullptr || element->m_data.pMonitor == nullptr) {
     if (rendererHook != nullptr && rendererHook->m_original != nullptr)
@@ -269,52 +256,11 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
     return;
   }
 
-  // Preserve Hyprland's ordinary surface path exactly at 1x. The explicit
-  // texture pass is only needed while the camera is actually transformed.
-  if (boundedZoom(board->second.zoom) == 1.0F && board->second.pan.x == 0.0 && board->second.pan.y == 0.0) {
-    if (rendererHook != nullptr && rendererHook->m_original != nullptr)
-      reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
-    return;
-  }
-
-  ++transformedRenders;
-  const auto& geometry = board->second.geometry;
-  const auto original = element->m_data;
-  const auto transformed = transformPoint(original.pos, geometry, board->second);
-  if (renderNumber <= 5 || renderNumber % 600 == 0)
-    debugLog("render hit n=" + std::to_string(renderNumber) + " identity=" + identity + " monitor=" + monitor->m_name
-             + " original=" + std::to_string(original.pos.x) + "," + std::to_string(original.pos.y)
-             + " size=" + std::to_string(original.w) + "," + std::to_string(original.h)
-             + " transformed=" + std::to_string(transformed.x) + "," + std::to_string(transformed.y) + "x"
-             + std::to_string(original.w * boundedZoom(board->second.zoom)));
-  // Let Hyprland prepare the surface, but suppress its ordinary untransformed
-  // draw. Render the transformed copy explicitly, like Astroland's custom
-  // texture passes.
-  element->m_data.alpha = 0.0F;
+  // Panning changes client geometry through the layout seam. Keep Hyprland's
+  // ordinary surface renderer so a 1x pan never scales or otherwise rewrites
+  // the window surface.
   if (rendererHook != nullptr && rendererHook->m_original != nullptr)
     reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
-  element->m_data = original;
-  if (original.texture == nullptr)
-    return;
-
-  const auto zoom = boundedZoom(board->second.zoom);
-  CTexPassElement::SRenderData renderData{.tex = original.texture,
-                                          .box = {transformed, Vector2D{original.w * zoom, original.h * zoom}},
-                                          .a = original.alpha,
-                                          .overallA = original.fadeAlpha,
-                                          .round = original.dontRound ? 0 : original.rounding,
-                                          .roundingPower = original.roundingPower,
-                                          .surface = original.surface,
-                                          .wrapX = original.wrapX,
-                                          .wrapY = original.wrapY,
-                                          .discardMode = original.discardMode,
-                                          .discardOpacity = original.discardOpacity,
-                                          .currentLS = original.pLS};
-  if (original.clipBox.w > 0.0 && original.clipBox.h > 0.0) {
-    const auto clipPosition = transformPoint({original.clipBox.x, original.clipBox.y}, geometry, board->second);
-    renderData.clipBox = {clipPosition, Vector2D{original.clipBox.w * zoom, original.clipBox.h * zoom}};
-  }
-  renderer->drawElement(makeShared<CTexPassElement>(std::move(renderData)), damage);
 }
 
 std::optional<size_t> jsonFieldValue(const std::string& json,
@@ -499,6 +445,39 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
   if (!move.starts_with("ok")) {
     debugLog("grid move failed identity=" + std::string{identity} + " response=" + move);
     return false;
+  }
+  return true;
+}
+
+bool dispatchPosition(std::string_view identity, int x, int y) {
+  const auto address = identity.starts_with("address:") ? std::string{identity} : "address:" + std::string{identity};
+  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(x) + ",y=" + std::to_string(y)
+                                     + ",relative=false,window=\"" + address + "\"})");
+  if (!move.starts_with("ok"))
+    debugLog("camera move failed identity=" + std::string{identity} + " response=" + move);
+  return move.starts_with("ok");
+}
+
+bool applyPan(Board& board, Vector2D pan) {
+  const auto previousPan = board.pan;
+  board.pan = pan;
+  std::vector<std::pair<std::string, Vector2D>> moved;
+  for (const auto& [identity, placement] : board.clients) {
+    if (placement.layer != "grid")
+      continue;
+    const auto position = Vector2D{placement.x + board.pan.x, placement.y + board.pan.y};
+    if (!dispatchPosition(
+            identity, static_cast<int>(std::lround(position.x)), static_cast<int>(std::lround(position.y)))) {
+      board.pan = previousPan;
+      for (const auto& [movedIdentity, _] : moved) {
+        const auto& movedPlacement = board.clients.at(movedIdentity);
+        dispatchPosition(movedIdentity,
+                         static_cast<int>(std::lround(movedPlacement.x + previousPan.x)),
+                         static_cast<int>(std::lround(movedPlacement.y + previousPan.y)));
+      }
+      return false;
+    }
+    moved.emplace_back(identity, position);
   }
   return true;
 }
@@ -1054,8 +1033,9 @@ int setCameraLua(lua_State* state) {
   if (zoom != 1.0F)
     return activationFailure(state, "zoom is disabled while pan-only camera mode is active");
   board->get().zoom = 1.0F;
-  board->get().pan = Vector2D{panX, panY};
-  board->get().pan = boundedPan(board->get(), board->get().geometry);
+  const auto pan = boundedPan(board->get(), board->get().geometry);
+  if (!applyPan(board->get(), pan))
+    return activationFailure(state, "camera geometry dispatch failed");
   debugLog("camera monitor=" + std::string{monitorValue, monitorLength} + " workspace=" + std::to_string(workspace)
            + " zoom=" + std::to_string(board->get().zoom) + " pan=" + std::to_string(board->get().pan.x) + ","
            + std::to_string(board->get().pan.y));
