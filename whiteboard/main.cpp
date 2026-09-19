@@ -307,15 +307,13 @@ void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
   const auto oldProjectionType = renderData.projectionType;
   const auto oldFbSize = renderData.fbSize;
   const auto oldTransformDamage = renderData.transformDamage;
+  const auto oldNoSimplify = renderData.noSimplify;
   const auto oldPrimarySurfaceUVTopLeft = renderData.primarySurfaceUVTopLeft;
   const auto oldPrimarySurfaceUVBottomRight = renderData.primarySurfaceUVBottomRight;
   const auto scale = monitor->m_scale;
   const auto framebufferSize =
       Vector2D{std::ceil((bounds.maxX - bounds.minX) * scale), std::ceil((bounds.maxY - bounds.minY) * scale)};
-  const CRegion canvasDamage{(bounds.minX - monitor->m_position.x) * scale,
-                             (bounds.minY - monitor->m_position.y) * scale,
-                             framebufferSize.x,
-                             framebufferSize.y};
+  const CRegion canvasDamage{0, 0, framebufferSize.x, framebufferSize.y};
 
   {
     auto guard = renderer->bindTempFB(framebuffer);
@@ -326,10 +324,8 @@ void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
     renderData.surface.reset();
     renderData.clipBox = {};
     renderData.renderModif = {};
-    renderData.renderModif.modifs.emplace_back(
-        Render::SRenderModifData::eRenderModifType::RMOD_TYPE_TRANSLATE,
-        Vector2D{(monitor->m_position.x - bounds.minX) * scale, (monitor->m_position.y - bounds.minY) * scale});
     renderData.transformDamage = false;
+    renderData.noSimplify = true;
     renderData.primarySurfaceUVTopLeft = Vector2D(-1, -1);
     renderData.primarySurfaceUVBottomRight = Vector2D(-1, -1);
     renderData.damage = canvasDamage;
@@ -347,6 +343,7 @@ void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
   renderData.renderModif = oldRenderModif;
   renderData.fbSize = oldFbSize;
   renderData.transformDamage = oldTransformDamage;
+  renderData.noSimplify = oldNoSimplify;
   renderer->setProjectionType(oldProjectionType);
   renderer->setViewport(0, 0, sc<int>(monitor->m_pixelSize.x), sc<int>(monitor->m_pixelSize.y));
   renderData.primarySurfaceUVTopLeft = oldPrimarySurfaceUVTopLeft;
@@ -407,6 +404,10 @@ void renderWorkspaceWindowsHook(Render::IHyprRenderer* renderer,
   }
 
   Render::CRenderPass windowPass;
+  const auto oldMonitorPosition = monitor->m_position;
+  // Pass elements mix eager decoration boxes with lazy surface boxes. Build and
+  // render both against the same canvas-local monitor origin.
+  monitor->m_position = Vector2D{bounds.minX, bounds.minY};
   {
     auto redirect = renderer->redirectPass(&windowPass);
     canvasCaptureMonitor = monitor;
@@ -418,6 +419,7 @@ void renderWorkspaceWindowsHook(Render::IHyprRenderer* renderer,
   }
 
   renderPassIntoFramebuffer(renderer, windowPass, framebuffer, monitor, bounds);
+  monitor->m_position = oldMonitorPosition;
   renderer->currentPass().add(makeUnique<CTexPassElement>(CTexPassElement::SRenderData{
       .tex = framebuffer->getTexture(),
       .box = canvasOutputBox(board->second, monitor, bounds),
