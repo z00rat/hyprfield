@@ -188,7 +188,6 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
 using DrawSurface = void (*)(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
 
 constexpr float kMinimumZoom = 0.25F;
-constexpr int kMinimumProjectedDimension = 32;
 
 float boundedZoom(float zoom) {
   return std::clamp(zoom, kMinimumZoom, 1.0F);
@@ -223,8 +222,8 @@ Board::Geometry projectGeometry(const Board& board, const Board::Geometry& world
       Vector2D{board.geometry.x + board.geometry.width / 2.0, board.geometry.y + board.geometry.height / 2.0};
   const auto worldCenter = Vector2D{world.x + world.width / 2.0, world.y + world.height / 2.0};
   const auto screenCenter = monitorCenter + (worldCenter - monitorCenter) * zoom + board.pan;
-  const auto width = std::max(kMinimumProjectedDimension, static_cast<int>(std::lround(world.width * zoom)));
-  const auto height = std::max(kMinimumProjectedDimension, static_cast<int>(std::lround(world.height * zoom)));
+  const auto width = static_cast<int>(std::lround(world.width * zoom));
+  const auto height = static_cast<int>(std::lround(world.height * zoom));
   return {.x = static_cast<int>(std::lround(screenCenter.x - width / 2.0)),
           .y = static_cast<int>(std::lround(screenCenter.y - height / 2.0)),
           .width = width,
@@ -482,8 +481,7 @@ bool dispatchScreenGeometry(std::string_view identity, const Board::Geometry& ge
   return true;
 }
 
-bool dispatchGeometry(const Board& board, std::string_view identity, const Board::Placement& placement) {
-  static_cast<void>(board);
+bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
   return dispatchScreenGeometry(identity, placement.world);
 }
 
@@ -739,7 +737,7 @@ int registerClientLua(lua_State* state) {
           record.row = row;
           record.column = column;
           setGeometry(board->get(), record, monitor);
-          if (!dispatchGeometry(board->get(), identity, record)) {
+          if (!dispatchGeometry(identity, record)) {
             board->get().clients.erase(identity);
             return activationFailure(state, "client geometry dispatch failed");
           }
@@ -819,11 +817,11 @@ int configureGridLua(lua_State* state) {
   for (auto& [identity, placement] : board->get().clients)
     if (placement.layer == "grid") {
       setGeometry(board->get(), placement, std::string_view{monitorValue, monitorLength});
-      if (!dispatchGeometry(board->get(), identity, placement)) {
+      if (!dispatchGeometry(identity, placement)) {
         grid = previousGrid;
         board->get().clients = previousPlacements;
         for (const auto& [previousIdentity, previousPlacement] : previousPlacements)
-          dispatchGeometry(board->get(), previousIdentity, previousPlacement);
+          dispatchGeometry(previousIdentity, previousPlacement);
         return placementFailure(state, "client geometry dispatch failed");
       }
     }
@@ -874,11 +872,11 @@ int placeGridLua(lua_State* state) {
       target.layer = "grid";
       setGeometry(board->get(), target, monitor);
       setGeometry(board->get(), other, monitor);
-      if (!dispatchGeometry(board->get(), identity, target) || !dispatchGeometry(board->get(), otherIdentity, other)) {
+      if (!dispatchGeometry(identity, target) || !dispatchGeometry(otherIdentity, other)) {
         target = previousTarget;
         other = previousOther;
-        dispatchGeometry(board->get(), identity, previousTarget);
-        dispatchGeometry(board->get(), otherIdentity, previousOther);
+        dispatchGeometry(identity, previousTarget);
+        dispatchGeometry(otherIdentity, previousOther);
         return placementFailure(state, "client geometry dispatch failed");
       }
       lua_pushboolean(state, true);
@@ -900,7 +898,7 @@ int placeGridLua(lua_State* state) {
   target.columnSpan = static_cast<int>(columnSpan);
   recomputeCanvasBounds(board->get());
   setGeometry(board->get(), target, monitor);
-  if (!dispatchGeometry(board->get(), identity, target)) {
+  if (!dispatchGeometry(identity, target)) {
     target = previousTarget;
     return placementFailure(state, "client geometry dispatch failed");
   }
@@ -939,7 +937,7 @@ int setLayerLua(lua_State* state) {
     recomputeCanvasBounds(board->get());
     found->second.layer = "grid";
     setGeometry(board->get(), found->second, std::string_view{monitorValue, monitorLength});
-    if (!dispatchGeometry(board->get(), identity, found->second)) {
+    if (!dispatchGeometry(identity, found->second)) {
       found->second = previousPlacement;
       return placementFailure(state, "client geometry dispatch failed");
     }
@@ -979,7 +977,7 @@ int placeFloatingLua(lua_State* state) {
                              .y = static_cast<int>(y),
                              .width = static_cast<int>(width),
                              .height = static_cast<int>(height)}};
-  if (!dispatchGeometry(board->get(), identity, found->second)) {
+  if (!dispatchGeometry(identity, found->second)) {
     found->second = previousPlacement;
     return placementFailure(state, "client geometry dispatch failed");
   }

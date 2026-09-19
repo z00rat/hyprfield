@@ -174,11 +174,15 @@ end
 function snapshot_grid
     set -l snapshot_workspace $argv[2]
     set -l snapshot (hyprctl -j clients | jq -c --arg workspace "$snapshot_workspace" \
-        '[.[] | select((.workspace.id | tostring) == $workspace) | {address, at, size, floating}]')
+        '[.[] | select((.workspace.id | tostring) == $workspace) | {address, at, size, floating}] | sort_by(.address)')
     echo "GRID SNAPSHOT: $argv[1]"
     echo $snapshot
     if test "$argv[1]" = "ordinary grid"
         set -g ordinary_snapshot $snapshot
+    end
+    if string match -q 'zoom *' -- "$argv[1]"; and test "$snapshot" != "$ordinary_snapshot"
+        echo "ERROR: zoom changed native client geometry; render-only zoom expected unchanged at/size."
+        set -g result 1
     end
     if test "$argv[1]" = "restored origin"; and test "$snapshot" != "$ordinary_snapshot"
         echo "ERROR: restored origin geometry differs from ordinary-grid geometry."
