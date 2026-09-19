@@ -390,16 +390,24 @@ bool freeSlots(const Board& board, std::string_view except, int row, int column,
   return true;
 }
 
-void setGeometry(Board& board, Board::Placement& placement, std::string_view monitor) {
-  const auto geometry = monitorGeometry(monitor);
-  const auto usableWidth = geometry.width - board.grid.margin * 2 - board.grid.gap * (board.grid.columns - 1);
-  const auto usableHeight = geometry.height - board.grid.margin * 2 - board.grid.gap * (board.grid.rows - 1);
-  const auto slotWidth = usableWidth / board.grid.columns;
-  const auto slotHeight = usableHeight / board.grid.rows;
-  placement.x = geometry.x + board.grid.margin + placement.column * (slotWidth + board.grid.gap);
-  placement.y = geometry.y + board.grid.margin + placement.row * (slotHeight + board.grid.gap);
-  placement.width = slotWidth * placement.columnSpan + board.grid.gap * (placement.columnSpan - 1);
-  placement.height = slotHeight * placement.rowSpan + board.grid.gap * (placement.rowSpan - 1);
+void setGeometry(Board& board, Board::Placement& placement, std::string_view) {
+  const auto& geometry = board.geometry;
+  const auto contentWidth = geometry.width - board.grid.margin * 2 - board.grid.gap * (board.grid.columns - 1);
+  const auto contentHeight = geometry.height - board.grid.margin * 2 - board.grid.gap * (board.grid.rows - 1);
+  const auto columnEdge = [contentWidth, &board](int column) {
+    return column * contentWidth / board.grid.columns + column * board.grid.gap;
+  };
+  const auto rowEdge = [contentHeight, &board](int row) {
+    return row * contentHeight / board.grid.rows + row * board.grid.gap;
+  };
+  const auto left = columnEdge(placement.column);
+  const auto right = columnEdge(placement.column + placement.columnSpan) - board.grid.gap;
+  const auto top = rowEdge(placement.row);
+  const auto bottom = rowEdge(placement.row + placement.rowSpan) - board.grid.gap;
+  placement.x = geometry.x + board.grid.margin + left;
+  placement.y = geometry.y + board.grid.margin + top;
+  placement.width = right - left;
+  placement.height = bottom - top;
 }
 
 bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
@@ -419,12 +427,13 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
     if (!floating.starts_with("ok"))
       return false;
   }
-  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(placement.x)
-                                     + ",y=" + std::to_string(placement.y) + ",window=\"" + address + "\"})");
+  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(placement.x) + ",y="
+                                     + std::to_string(placement.y) + ",relative=false,window=\"" + address + "\"})");
   if (!move.starts_with("ok"))
     return false;
-  const auto resize = invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(placement.width)
-                                       + ",y=" + std::to_string(placement.height) + ",window=\"" + address + "\"})");
+  const auto resize =
+      invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(placement.width)
+                       + ",y=" + std::to_string(placement.height) + ",relative=false,window=\"" + address + "\"})");
   return resize.starts_with("ok");
 }
 
