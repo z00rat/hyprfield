@@ -109,8 +109,8 @@ function restore_windows
             echo "WARNING: could not restore workspace for $address: $workspace_result"
         end
         if test "$original_floating" = "true"
-            set -l move_result (hyprctl dispatch "hl.dsp.window.move({x=$original_x,y=$original_y,window=\"address:$address\"})" 2>&1)
-            set -l resize_result (hyprctl dispatch "hl.dsp.window.resize({x=$original_width,y=$original_height,window=\"address:$address\"})" 2>&1)
+            set -l move_result (hyprctl dispatch "hl.dsp.window.move({x=$original_x,y=$original_y,relative=false,window=\"address:$address\"})" 2>&1)
+            set -l resize_result (hyprctl dispatch "hl.dsp.window.resize({x=$original_width,y=$original_height,relative=false,window=\"address:$address\"})" 2>&1)
             if not string match -q 'ok*' -- $move_result
                 echo "WARNING: could not restore position for $address: $move_result"
             end
