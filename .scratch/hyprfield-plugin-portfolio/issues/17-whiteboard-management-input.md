@@ -14,3 +14,8 @@
 - [ ] Input coordinates are inverse-transformed consistently with the camera when selecting a managed client.
 - [ ] Unsupported or failed input-hook setup leaves input with Hyprland and the board usable as an ordinary workspace.
 - [ ] Tests cover management gestures, activation, 1x pass-through, hook failure, and teardown without relying on private helper implementation details.
+
+## Comments
+
+- Partial progress only: the `CInputManager::onMouseMoved` hook and 1x pass-through seam exist, but the hook currently delegates without implementing pan/zoom gestures, inverse hit testing, or client activation.
+- Next implementation should add management-mode gesture ownership and activation on top of the existing camera API; do not replace the renderer-pass implementation in issue 16.

@@ -15,6 +15,12 @@
 - [ ] Unsupported renderer, input, direct-scanout, or host-version conditions fail closed to an ordinary usable workspace and do not leave hooks, transforms, or stale state after unload.
 - [ ] Integration tests cover the observable compositor outcomes rather than private helper functions or exact hook call sequences.
 
+## Comments
+
+- Partial progress: the manual walkthrough now exercises exactly ten deterministic windows, zoom levels, 1x panning in four directions, native geometry snapshots, and restoration.
+- The live renderer/canvas path is confirmed, including surrounding windows and complete window-pass compositing. Full integration remains pending for management input, popup behavior, multiple monitors, and failure-path coverage.
+- Next implementation should extend the existing public-API harness and manual workflow rather than introduce a second rendering or placement implementation.
+
 ## Scope boundary
 
 This is an integration and acceptance ticket, not a place to add a second implementation of placement, rendering, or input. Any failing slice is fixed in its owning issue first.
