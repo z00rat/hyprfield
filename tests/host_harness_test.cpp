@@ -35,7 +35,7 @@ void verify_whiteboard(const std::string& plugin_path) {
   host.setFunction("IHyprRenderer::renderWorkspaceWindows(PHLMONITOR, PHLWORKSPACE, Time::steady_tp const&)");
   host.setFunction("CInputManager::onMouseMoved(IPointer::SMotionEvent)");
   expect(host.loadPlugin(plugin_path, "0.1"));
-  expect(host.hookCount() == 2);
+  expect(host.hookCount() == 3);
   expect(host.notifications().back().text == "[whiteboard] workspace model ready; camera renderer active");
   expect(host.invokeLua("whiteboard", "proof", "DP-1"));
   expect(host.notifications().back().text == "[whiteboard proof] monitor-scoped temporary artifact on DP-1");
@@ -150,6 +150,9 @@ void verify_whiteboard(const std::string& plugin_path) {
       "whiteboard", "configureGrid", std::vector<std::string>{"DP-1", "42", "0", "4", "10", "20", "grid"}));
   expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "1.0"}));
   expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "0.5"}));
+  expect(model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
+  expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "0.9"}));
+  expect(!model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
   expect(!model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "0.1"}));
   expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "1.0"}));
   expect(model.invokeLua("whiteboard", "normal", std::vector<std::string>{"DP-1", "42"}));

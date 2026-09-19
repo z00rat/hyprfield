@@ -240,6 +240,8 @@ void HostHarness::setHostVersion(std::string_view tag, bool dirty) {
 
 void HostHarness::setFunction(std::string_view demangled) {
   functions_.push_back({.demangled = std::string{demangled}});
+  if (demangled == "IHyprRenderer::renderWorkspaceWindows(PHLMONITOR, PHLWORKSPACE, Time::steady_tp const&)")
+    functions_.push_back({.demangled = "CWindow::visibleOnMonitor(PHLMONITOR)"});
 }
 
 void HostHarness::setHookRegistration(bool succeeds) {

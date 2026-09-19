@@ -168,8 +168,7 @@ CFunctionHook* installHook(std::string_view className, std::string_view methodNa
            && match.demangled.contains(std::string{className} + "::" + std::string{methodName} + "(");
   });
   if (found == matches.end()) {
-    if (methodName != kWindowVisibilityMethod)
-      report("missing " + std::string{className} + "::" + std::string{methodName});
+    report("missing " + std::string{className} + "::" + std::string{methodName});
     return nullptr;
   }
 
@@ -209,6 +208,7 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
 }
 
 constexpr float kMinimumZoom = 0.25F;
+constexpr float kManagementThreshold = 0.9F;
 
 float boundedZoom(float zoom) {
   return std::clamp(zoom, kMinimumZoom, 1.0F);
@@ -1244,7 +1244,7 @@ int managementLua(lua_State* state) {
   const auto board = monitorValue == nullptr || !isWorkspace
                          ? std::optional<std::reference_wrapper<Board>>{}
                          : findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
-  lua_pushboolean(state, false);
+  lua_pushboolean(state, board && board->get().zoom < kManagementThreshold);
   return 1;
 }
 
@@ -1416,7 +1416,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
   workspaceRenderHook = installHook(kRenderClass, kRenderMethod);
   inputHook = installHook(kInputClass, kInputMethod);
   windowVisibilityHook = installHook(kWindowClass, kWindowVisibilityMethod);
-  if (workspaceRenderHook == nullptr || inputHook == nullptr) {
+  if (workspaceRenderHook == nullptr || inputHook == nullptr || windowVisibilityHook == nullptr) {
     for (auto* hook : hooks)
       HyprlandAPI::removeFunctionHook(pluginHandle, hook);
     hooks.clear();
