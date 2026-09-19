@@ -1,5 +1,4 @@
 #include <algorithm>
-#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -13,9 +12,7 @@
 #include <hyprland/src/output/Monitor.hpp>
 #include <hyprland/src/plugins/HookSystem.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
-#include <hyprland/src/render/ElementRenderer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
-#include <hyprland/src/render/pass/SurfacePassElement.hpp>
 #include <hyprland/src/render/pass/TexPassElement.hpp>
 #include <hyprland/src/state/MonitorState.hpp>
 #include <optional>
@@ -31,10 +28,6 @@ extern "C" {
 #include <lua.h>
 }
 
-namespace Render {
-class IElementRenderer;
-}
-
 namespace {
 
 struct MonitorGeometry {
@@ -45,15 +38,14 @@ struct MonitorGeometry {
 };
 
 constexpr std::string_view kPluginName = "whiteboard";
-constexpr std::string_view kRenderClass = "IElementRenderer";
-constexpr std::string_view kRenderMethod = "drawSurface";
+constexpr std::string_view kRenderClass = "IHyprRenderer";
+constexpr std::string_view kRenderMethod = "renderWorkspaceWindows";
 constexpr std::string_view kInputClass = "CInputManager";
 constexpr std::string_view kInputMethod = "onMouseMoved";
 
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
 std::vector<CHyprSignalListener> lifecycleListeners;
-std::atomic_uint64_t transformedDebugRenders = 0;
 
 struct Board {
   struct Geometry {
@@ -64,6 +56,7 @@ struct Board {
   };
   std::string monitor;
   int workspace;
+  PHLWORKSPACE workspaceRef;
   float zoom = 1.0F;
   Vector2D pan;
   float targetZoom = 1.0F;
@@ -99,9 +92,9 @@ struct Board {
 };
 
 std::unordered_map<int, Board> activeBoards;
-CFunctionHook* rendererHook = nullptr;
+CFunctionHook* workspaceRenderHook = nullptr;
 CFunctionHook* inputHook = nullptr;
-void drawSurfaceHook(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
+void renderWorkspaceWindowsHook(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&);
 void mouseMovedHook(CInputManager*, IPointer::SMotionEvent);
 void updateCamera(Board&);
 void persist();
@@ -160,7 +153,7 @@ CFunctionHook* installHook(std::string_view className, std::string_view methodNa
     return nullptr;
   }
 
-  const auto destination = methodName == kRenderMethod ? reinterpret_cast<const void*>(&drawSurfaceHook)
+  const auto destination = methodName == kRenderMethod ? reinterpret_cast<const void*>(&renderWorkspaceWindowsHook)
                                                        : reinterpret_cast<const void*>(&mouseMovedHook);
   auto* hook = HyprlandAPI::createFunctionHook(pluginHandle, found->address, destination);
   if (hook == nullptr || !hook->hook()) {
@@ -193,8 +186,6 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
     return std::nullopt;
   return found->second;
 }
-
-using DrawSurface = void (*)(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
 
 constexpr float kMinimumZoom = 0.25F;
 
@@ -263,78 +254,108 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
     reinterpret_cast<void (*)(CInputManager*, IPointer::SMotionEvent)>(inputHook->m_original)(input, event);
 }
 
-void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement> weakElement, const CRegion& damage) {
-  auto* element = weakElement.get();
-  if (element == nullptr || element->m_data.pWindow == nullptr || element->m_data.pMonitor == nullptr) {
-    if (rendererHook != nullptr && rendererHook->m_original != nullptr)
-      reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
+void renderPassIntoFramebuffer(Render::IHyprRenderer* renderer,
+                               Render::CRenderPass& pass,
+                               SP<Render::IFramebuffer> framebuffer,
+                               PHLMONITOR monitor) {
+  auto& renderData = renderer->m_renderData;
+  const auto oldDamage = renderData.damage.copy();
+  const auto oldFinalDamage = renderData.finalDamage.copy();
+  const auto oldWindow = renderData.currentWindow;
+  const auto oldSurface = renderData.surface;
+  const auto oldClipBox = renderData.clipBox;
+  const auto oldRenderModif = renderData.renderModif;
+  const auto oldPrimarySurfaceUVTopLeft = renderData.primarySurfaceUVTopLeft;
+  const auto oldPrimarySurfaceUVBottomRight = renderData.primarySurfaceUVBottomRight;
+  const CRegion fullDamage{0.0,
+                           0.0,
+                           static_cast<double>(sc<int>(monitor->m_transformedSize.x)),
+                           static_cast<double>(sc<int>(monitor->m_transformedSize.y))};
+
+  {
+    auto guard = renderer->bindTempFB(framebuffer);
+    renderData.currentWindow.reset();
+    renderData.surface.reset();
+    renderData.clipBox = {};
+    renderData.renderModif = {};
+    renderData.primarySurfaceUVTopLeft = Vector2D(-1, -1);
+    renderData.primarySurfaceUVBottomRight = Vector2D(-1, -1);
+    renderData.damage = fullDamage;
+    renderData.finalDamage = fullDamage;
+
+    renderer->draw(CClearPassElement::SClearData{CHyprColor(0, 0, 0, 0)});
+    pass.render(fullDamage);
+  }
+
+  renderData.damage = oldDamage;
+  renderData.finalDamage = oldFinalDamage;
+  renderData.currentWindow = oldWindow;
+  renderData.surface = oldSurface;
+  renderData.clipBox = oldClipBox;
+  renderData.renderModif = oldRenderModif;
+  renderData.primarySurfaceUVTopLeft = oldPrimarySurfaceUVTopLeft;
+  renderData.primarySurfaceUVBottomRight = oldPrimarySurfaceUVBottomRight;
+}
+
+CBox canvasOutputBox(const Board& board, PHLMONITOR monitor) {
+  const auto zoom = boundedZoom(board.zoom);
+  const auto center = Vector2D{board.geometry.width / 2.0, board.geometry.height / 2.0};
+  const auto logicalPosition = center + (Vector2D{} - center) * zoom + board.pan;
+  const auto logicalSize = Vector2D{board.geometry.width * zoom, board.geometry.height * zoom};
+  return {logicalPosition * monitor->m_scale, logicalSize * monitor->m_scale};
+}
+
+void renderWorkspaceWindowsHook(Render::IHyprRenderer* renderer,
+                                PHLMONITOR monitor,
+                                PHLWORKSPACE workspace,
+                                const Time::steady_tp& time) {
+  if (renderer == nullptr || monitor == nullptr || workspace == nullptr || monitor->m_activeWorkspace != workspace
+      || workspaceRenderHook == nullptr || workspaceRenderHook->m_original == nullptr) {
+    if (workspaceRenderHook != nullptr && workspaceRenderHook->m_original != nullptr)
+      reinterpret_cast<void (*)(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&)>(
+          workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
     return;
   }
 
-  const auto monitor = element->m_data.pMonitor.get();
-  const auto window = element->m_data.pWindow.get();
-  if (monitor == nullptr || window == nullptr) {
-    if (rendererHook != nullptr && rendererHook->m_original != nullptr)
-      reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
-    return;
-  }
-  const auto identity = std::format("0x{:x}", reinterpret_cast<uintptr_t>(window));
-  const auto board = std::ranges::find_if(
-      activeBoards, [&identity](const auto& entry) { return entry.second.clients.contains(identity); });
-  if (board == activeBoards.end() || board->second.monitor != monitor->m_name) {
-    if (rendererHook != nullptr && rendererHook->m_original != nullptr)
-      reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
+  const auto board = std::ranges::find_if(activeBoards, [monitor, workspace](const auto& entry) {
+    return entry.second.monitor == monitor->m_name
+           && (entry.second.workspaceRef == nullptr || entry.second.workspaceRef == workspace);
+  });
+  if (board == activeBoards.end()) {
+    reinterpret_cast<void (*)(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&)>(
+        workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
     return;
   }
 
+  board->second.workspaceRef = workspace;
   updateCamera(board->second);
-  const auto zoom = boundedZoom(board->second.zoom);
-  const auto original = element->m_data;
-  const auto monitorCenter = Vector2D{board->second.geometry.x + board->second.geometry.width / 2.0,
-                                      board->second.geometry.y + board->second.geometry.height / 2.0};
-  const auto logicalPosition = monitorCenter + (original.pos - monitorCenter) * zoom + board->second.pan;
-  const auto logicalSize = Vector2D{original.w * zoom, original.h * zoom};
-  const auto transformedPosition = (logicalPosition - monitor->m_position) * monitor->m_scale;
-  const auto transformedSize = logicalSize * monitor->m_scale;
-  const auto transformed = zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0;
-  if (transformed) {
-    const auto debugRender = ++transformedDebugRenders;
-    if (debugRender <= 40 || debugRender % 300 == 0)
-      debugLog("render transform n=" + std::to_string(debugRender) + " identity=" + identity
-               + " monitor=" + monitor->m_name + " monitorPos=" + std::to_string(monitor->m_position.x) + ","
-               + std::to_string(monitor->m_position.y) + " monitorSize=" + std::to_string(monitor->m_size.x) + "x"
-               + std::to_string(monitor->m_size.y) + " scale=" + std::to_string(monitor->m_scale)
-               + " cameraZoom=" + std::to_string(zoom) + " cameraPan=" + std::to_string(board->second.pan.x) + ","
-               + std::to_string(board->second.pan.y) + " source=" + std::to_string(original.pos.x) + ","
-               + std::to_string(original.pos.y) + " " + std::to_string(original.w) + "x" + std::to_string(original.h)
-               + " destination=" + std::to_string(transformedPosition.x) + "," + std::to_string(transformedPosition.y)
-               + " " + std::to_string(transformedSize.x) + "x" + std::to_string(transformedSize.y));
-    element->m_data.alpha = 0.0F;
-    if (rendererHook != nullptr && rendererHook->m_original != nullptr)
-      reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
-    element->m_data = original;
-    if (original.texture != nullptr)
-      renderer->drawElement(makeShared<CTexPassElement>(CTexPassElement::SRenderData{
-                                .tex = original.texture,
-                                .box = {transformedPosition, transformedSize},
-                                .a = original.alpha,
-                                .overallA = original.fadeAlpha,
-                                .round = original.dontRound ? 0 : original.rounding,
-                                .roundingPower = original.roundingPower,
-                                .allowCustomUV = true,
-                                .surface = original.surface,
-                                .wrapX = original.wrapX,
-                                .wrapY = original.wrapY,
-                                .discardMode = original.discardMode,
-                                .discardOpacity = original.discardOpacity,
-                                .currentLS = original.pLS,
-                            }),
-                            damage);
+  const auto transformed = board->second.zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0;
+  if (!transformed) {
+    reinterpret_cast<void (*)(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&)>(
+        workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
     return;
   }
-  if (rendererHook != nullptr && rendererHook->m_original != nullptr)
-    reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
-  element->m_data = original;
+
+  const auto framebuffer = monitor->resources()->getUnusedWorkBuffer();
+  if (!framebuffer) {
+    reinterpret_cast<void (*)(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&)>(
+        workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
+    return;
+  }
+
+  Render::CRenderPass windowPass;
+  {
+    auto redirect = renderer->redirectPass(&windowPass);
+    reinterpret_cast<void (*)(Render::IHyprRenderer*, PHLMONITOR, PHLWORKSPACE, const Time::steady_tp&)>(
+        workspaceRenderHook->m_original)(renderer, monitor, workspace, time);
+  }
+
+  renderPassIntoFramebuffer(renderer, windowPass, framebuffer, monitor);
+  renderer->currentPass().add(makeUnique<CTexPassElement>(CTexPassElement::SRenderData{
+      .tex = framebuffer->getTexture(),
+      .box = canvasOutputBox(board->second, monitor),
+      .a = 1.0F,
+  }));
 }
 
 std::optional<size_t> jsonFieldValue(const std::string& json,
@@ -539,7 +560,6 @@ bool applyPan(Board& board, Vector2D pan) {
 }
 
 void requestCamera(Board& board, Vector2D targetPan, float targetZoom) {
-  transformedDebugRenders = 0;
   const auto currentPan = board.pan;
   const auto currentZoom = board.zoom;
   board.pan = targetPan;
@@ -1314,9 +1334,9 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     return {};
   }
 
-  rendererHook = installHook(kRenderClass, kRenderMethod);
+  workspaceRenderHook = installHook(kRenderClass, kRenderMethod);
   inputHook = installHook(kInputClass, kInputMethod);
-  if (rendererHook == nullptr || inputHook == nullptr) {
+  if (workspaceRenderHook == nullptr || inputHook == nullptr) {
     for (auto* hook : hooks)
       HyprlandAPI::removeFunctionHook(pluginHandle, hook);
     hooks.clear();
@@ -1379,7 +1399,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
   for (auto* hook : hooks)
     HyprlandAPI::removeFunctionHook(pluginHandle, hook);
   hooks.clear();
-  rendererHook = nullptr;
+  workspaceRenderHook = nullptr;
   inputHook = nullptr;
   lifecycleListeners.clear();
   activeBoards.clear();

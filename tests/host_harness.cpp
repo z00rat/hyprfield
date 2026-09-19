@@ -10,6 +10,7 @@ extern "C" {
 #include <hyprland/src/event/EventBus.hpp>
 #include <hyprland/src/helpers/Color.hpp>
 #include <hyprland/src/managers/input/InputManager.hpp>
+#include <hyprland/src/output/MonitorResources.hpp>
 #include <hyprland/src/plugins/PluginAPI.hpp>
 #include <hyprland/src/render/ElementRenderer.hpp>
 #include <hyprland/src/render/Renderer.hpp>
@@ -65,6 +66,30 @@ Vector2D CInputManager::getMouseCoordsInternal() {
 
 void Render::IHyprRenderer::damageBox(const int&, const int&, const int&, const int&) {}
 void Render::IElementRenderer::drawElement(WP<IPassElement>, const CRegion&) {}
+void Render::CRenderPass::add(UP<IPassElement>&&) {}
+CRegion Render::CRenderPass::render(const CRegion& damage) {
+  return damage;
+}
+Render::CRenderPass& Render::IHyprRenderer::currentPass() {
+  static Render::CRenderPass pass;
+  return pass;
+}
+UP<Render::CScopeGuard> Render::IHyprRenderer::redirectPass(Render::CRenderPass*) {
+  return makeUnique<Render::CScopeGuard>([] {});
+}
+UP<Render::CScopeGuard> Render::IHyprRenderer::bindTempFB(SP<Render::IFramebuffer>) {
+  return makeUnique<Render::CScopeGuard>([] {});
+}
+void Render::IHyprRenderer::draw(const CClearPassElement::SClearData&, const CRegion&) {}
+SP<Render::IFramebuffer> Monitor::CMonitorResources::getUnusedWorkBuffer() {
+  return nullptr;
+}
+WP<Monitor::CMonitorResources> Monitor::CMonitor::resources() {
+  return {};
+}
+SP<Render::ITexture> Render::IFramebuffer::getTexture() {
+  return nullptr;
+}
 CTexPassElement::CTexPassElement(SRenderData&& data) : m_data(std::move(data)) {}
 std::vector<UP<IPassElement>> IPassElement::draw() {
   return {};
