@@ -257,5 +257,56 @@ if test $result -eq 0
     snapshot_grid "ordinary grid" "$workspace"
 end
 
+if test $result -eq 0
+    echo "Panning the 1x whiteboard viewport right..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 350, 0) end"
+        echo "Could not pan right."
+        set result 1
+    end
+    snapshot_grid "pan right" "$workspace"
+end
+
+if test $result -eq 0
+    sleep 2
+    echo "Panning the 1x whiteboard viewport left..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -350, 0) end"
+        echo "Could not pan left."
+        set result 1
+    end
+    snapshot_grid "pan left" "$workspace"
+end
+
+if test $result -eq 0
+    sleep 2
+    echo "Panning the 1x whiteboard viewport up..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -350) end"
+        echo "Could not pan up."
+        set result 1
+    end
+    snapshot_grid "pan up" "$workspace"
+end
+
+if test $result -eq 0
+    sleep 2
+    echo "Panning the 1x whiteboard viewport down..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 350) end"
+        echo "Could not pan down."
+        set result 1
+    end
+    snapshot_grid "pan down" "$workspace"
+end
+
+if test $result -eq 0
+    echo "Restoring the ordinary viewport..."
+    echo
+    sleep 2
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 0) end"
+        echo "Could not restore ordinary viewport."
+        set result 1
+    end
+    snapshot_grid "restored origin" "$workspace"
+    sleep 2
+end
+
 cleanup
 exit $result

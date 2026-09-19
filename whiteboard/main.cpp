@@ -214,8 +214,10 @@ Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
 Vector2D transformPoint(const Vector2D& point, const MonitorGeometry& geometry, const Board& board) {
   const auto zoom = boundedZoom(board.zoom);
   const auto pan = boundedPan(board, geometry);
+  const auto origin = Vector2D{geometry.x, geometry.y};
   const auto center = Vector2D{geometry.width / 2.0, geometry.height / 2.0};
-  return center + (point - center) * zoom + pan;
+  const auto localPoint = point - origin;
+  return origin + center + (localPoint - center) * zoom + pan;
 }
 
 MonitorGeometry monitorGeometry(std::string_view monitor);
