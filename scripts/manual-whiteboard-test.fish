@@ -172,8 +172,8 @@ end
 
 function snapshot_grid
     echo "GRID SNAPSHOT: $argv[1]"
-    hyprctl -j clients | jq --argjson workspace "$workspace" \
-        '[.[] | select(.workspace.id == $workspace) | {address, at, size, floating}]'
+    hyprctl -j clients | jq --arg workspace "$workspace" \
+        '[.[] | select((.workspace.id | tostring) == $workspace) | {address, at, size, floating}]'
 end
 
 if not test -f "$plugin"
