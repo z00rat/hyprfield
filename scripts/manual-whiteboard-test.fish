@@ -85,7 +85,6 @@ if test (count $test_addresses) -lt 4
     echo "At least four non-fullscreen windows are required for the rectangular grid test."
     exit 1
 end
-set test_addresses $test_addresses[1..4]
 echo "Temporarily testing windows: $test_addresses"
 
 function restore_windows
@@ -204,7 +203,10 @@ end
 
 set -l window_count (count $test_addresses)
 set -l grid_rows 2
-    if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, 4, 2, 2, 'grid') end"
+set -l extra_count (math "$window_count - 4")
+set -l extra_columns (math "ceil($extra_count / 2)")
+set -l grid_columns (math "4 + $extra_columns")
+if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, $grid_columns, 2, 2, 'grid') end"
     echo "Could not configure the Whiteboard grid."
     set result 1
 end
@@ -216,10 +218,17 @@ if test $result -eq 0
     set -l grid_column_spans 2 1 1 2
     set -l index 0
     for address in $test_addresses
-        set -l row $grid_rows_for_clients[(math "$index + 1")]
-        set -l column $grid_columns_for_clients[(math "$index + 1")]
-        set -l row_span $grid_row_spans[(math "$index + 1")]
-        set -l column_span $grid_column_spans[(math "$index + 1")]
+        if test $index -lt 4
+            set row $grid_rows_for_clients[(math "$index + 1")]
+            set column $grid_columns_for_clients[(math "$index + 1")]
+            set row_span $grid_row_spans[(math "$index + 1")]
+            set column_span $grid_column_spans[(math "$index + 1")]
+        else
+            set row (math "($index - 4) % 2")
+            set column (math "4 + floor(($index - 4) / 2)")
+            set row_span 1
+            set column_span 1
+        end
         if not whiteboard_dispatch "function() hl.plugin.whiteboard.placeGrid('$monitor', $workspace, '$address', $row, $column, $row_span, $column_span) end"
             echo "Could not place window $address in the grid."
             set result 1
