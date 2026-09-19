@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cstdint>
 #include <cstdlib>
@@ -48,6 +49,8 @@ constexpr std::string_view kInputMethod = "onMouseMoved";
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
 std::vector<CHyprSignalListener> lifecycleListeners;
+std::atomic_uint64_t renderCalls = 0;
+std::atomic_uint64_t transformedRenders = 0;
 
 struct Board {
   std::string monitor;
@@ -225,6 +228,7 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
 }
 
 void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement> weakElement, const CRegion& damage) {
+  const auto renderNumber = ++renderCalls;
   auto* element = weakElement.get();
   if (element == nullptr || element->m_data.pWindow == nullptr || element->m_data.pMonitor == nullptr) {
     if (rendererHook != nullptr && rendererHook->m_original != nullptr)
@@ -248,9 +252,16 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
     return;
   }
 
+  ++transformedRenders;
   const auto& geometry = board->second.geometry;
   const auto original = element->m_data;
   const auto transformed = transformPoint(original.pos, geometry, board->second);
+  if (renderNumber <= 5 || renderNumber % 600 == 0)
+    debugLog("render hit n=" + std::to_string(renderNumber) + " identity=" + identity + " monitor=" + monitor->m_name
+             + " original=" + std::to_string(original.pos.x) + "," + std::to_string(original.pos.y)
+             + " size=" + std::to_string(original.w) + "," + std::to_string(original.h)
+             + " transformed=" + std::to_string(transformed.x) + "," + std::to_string(transformed.y) + "x"
+             + std::to_string(original.w * boundedZoom(board->second.zoom)));
   element->m_data.pos = transformed;
   element->m_data.localPos = transformPoint(original.localPos, geometry, board->second);
   element->m_data.w = original.w * boundedZoom(board->second.zoom);
@@ -939,6 +950,9 @@ int setCameraLua(lua_State* state) {
   board->get().zoom = boundedZoom(zoom);
   board->get().pan = Vector2D{panX, panY};
   board->get().pan = boundedPan(board->get(), board->get().geometry);
+  debugLog("camera monitor=" + std::string{monitorValue, monitorLength} + " workspace=" + std::to_string(workspace)
+           + " zoom=" + std::to_string(board->get().zoom) + " pan=" + std::to_string(board->get().pan.x) + ","
+           + std::to_string(board->get().pan.y));
   damageBoard(board->get());
   lua_pushboolean(state, true);
   return 1;
