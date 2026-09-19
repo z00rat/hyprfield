@@ -90,6 +90,7 @@ echo "Temporarily testing windows: $board_addresses"
 if test (count $test_addresses) -gt 4
     echo "Leaving extra windows outside the whiteboard layout: $test_addresses[5..-1]"
 end
+set -l parking_workspace (math "$workspace + 100")
 
 function restore_windows
     echo "Restoring original window placement..."
@@ -176,6 +177,17 @@ end
 if not test -f "$plugin"
     echo "Missing plugin: $plugin"
     exit 1
+end
+
+if test (count $test_addresses) -gt 4
+    for address in $test_addresses[5..-1]
+        set -l parking_result (hyprctl dispatch "hl.dsp.window.move({workspace=\"$parking_workspace\",follow=false,window=\"address:$address\"})" 2>&1)
+        if not string match -q 'ok*' -- $parking_result
+            echo "Could not park extra window $address: $parking_result"
+            cleanup
+            exit 1
+        end
+    end
 end
 
 set load_attempted 1
