@@ -487,12 +487,12 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
       return false;
   }
   const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(placement.x) + ",y="
-                                     + std::to_string(placement.y) + ",relative=false,window=\"" + address + "\"})");
+                                     + std::to_string(placement.y) + ",relative = false,window=\"" + address + "\"})");
   if (!move.starts_with("ok"))
     return false;
   const auto resize =
       invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(placement.width)
-                       + ",y=" + std::to_string(placement.height) + ",relative=false,window=\"" + address + "\"})");
+                       + ",y=" + std::to_string(placement.height) + ",relative = false,window=\"" + address + "\"})");
   if (!resize.starts_with("ok"))
     debugLog("grid resize failed identity=" + std::string{identity} + " response=" + resize);
   return resize.starts_with("ok");
