@@ -171,8 +171,9 @@ function whiteboard_dispatch
 end
 
 function snapshot_grid
+    set -l snapshot_workspace $argv[2]
     echo "GRID SNAPSHOT: $argv[1]"
-    hyprctl -j clients | jq --arg workspace "$workspace" \
+    hyprctl -j clients | jq --arg workspace "$snapshot_workspace" \
         '[.[] | select((.workspace.id | tostring) == $workspace) | {address, at, size, floating}]'
 end
 
@@ -246,7 +247,7 @@ end
 if test $result -eq 0
     echo
     echo "SUCCESS: Whiteboard placed all active windows."
-    snapshot_grid "ordinary grid"
+    snapshot_grid "ordinary grid" "$workspace"
     echo "Holding the ordinary grid for 5 seconds..."
     sleep 5
     echo "Panning the 1x whiteboard viewport right..."
@@ -254,7 +255,7 @@ if test $result -eq 0
         echo "Could not pan right."
         set result 1
     end
-    snapshot_grid "pan right"
+    snapshot_grid "pan right" "$workspace"
 end
 
 if test $result -eq 0
@@ -264,7 +265,7 @@ if test $result -eq 0
         echo "Could not pan left."
         set result 1
     end
-    snapshot_grid "pan left"
+    snapshot_grid "pan left" "$workspace"
 end
 
 if test $result -eq 0
@@ -274,7 +275,7 @@ if test $result -eq 0
         echo "Could not pan up."
         set result 1
     end
-    snapshot_grid "pan up"
+    snapshot_grid "pan up" "$workspace"
 end
 
 if test $result -eq 0
@@ -283,7 +284,7 @@ if test $result -eq 0
         echo "Could not pan down."
         set result 1
     end
-    snapshot_grid "pan down"
+    snapshot_grid "pan down" "$workspace"
 end
 
 if test $result -eq 0
@@ -294,7 +295,7 @@ if test $result -eq 0
         echo "Could not restore ordinary viewport."
         set result 1
     end
-    snapshot_grid "restored origin"
+    snapshot_grid "restored origin" "$workspace"
     sleep 2
 end
 
