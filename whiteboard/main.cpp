@@ -489,16 +489,20 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
     if (!floating.starts_with("ok"))
       return false;
   }
-  const auto move = invokeLegacyDispatcher(
-      "movewindowpixel", "exact " + std::to_string(placement.x) + " " + std::to_string(placement.y) + "," + address);
-  if (!move.starts_with("ok"))
-    return false;
   const auto resize = invokeLegacyDispatcher(
       "resizewindowpixel",
       "exact " + std::to_string(placement.width) + " " + std::to_string(placement.height) + "," + address);
-  if (!resize.starts_with("ok"))
+  if (!resize.starts_with("ok")) {
     debugLog("grid resize failed identity=" + std::string{identity} + " response=" + resize);
-  return resize.starts_with("ok");
+    return false;
+  }
+  const auto move = invokeLegacyDispatcher(
+      "movewindowpixel", "exact " + std::to_string(placement.x) + " " + std::to_string(placement.y) + "," + address);
+  if (!move.starts_with("ok")) {
+    debugLog("grid move failed identity=" + std::string{identity} + " response=" + move);
+    return false;
+  }
+  return true;
 }
 
 int placementFailure(lua_State* state, std::string_view reason) {
