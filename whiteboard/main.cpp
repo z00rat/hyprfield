@@ -408,6 +408,14 @@ void setGeometry(Board& board, Board::Placement& placement, std::string_view) {
   placement.y = geometry.y + board.grid.margin + top;
   placement.width = right - left;
   placement.height = bottom - top;
+  debugLog("grid monitorBox=" + std::to_string(geometry.x) + "," + std::to_string(geometry.y) + " "
+           + std::to_string(geometry.width) + "x" + std::to_string(geometry.height)
+           + " cells=" + std::to_string(board.grid.rows) + "x" + std::to_string(board.grid.columns)
+           + " gap=" + std::to_string(board.grid.gap) + " margin=" + std::to_string(board.grid.margin)
+           + " placement=" + std::to_string(placement.row) + "," + std::to_string(placement.column) + "+"
+           + std::to_string(placement.rowSpan) + "x" + std::to_string(placement.columnSpan)
+           + " box=" + std::to_string(placement.x) + "," + std::to_string(placement.y) + " "
+           + std::to_string(placement.width) + "x" + std::to_string(placement.height));
 }
 
 bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
@@ -434,6 +442,8 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
   const auto resize =
       invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(placement.width)
                        + ",y=" + std::to_string(placement.height) + ",relative=false,window=\"" + address + "\"})");
+  if (!resize.starts_with("ok"))
+    debugLog("grid resize failed identity=" + std::string{identity} + " response=" + resize);
   return resize.starts_with("ok");
 }
 
