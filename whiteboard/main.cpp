@@ -64,6 +64,12 @@ struct Board {
   int workspace;
   float zoom = 1.0F;
   Vector2D pan;
+  float targetZoom = 1.0F;
+  Vector2D targetPan;
+  float animationStartZoom = 1.0F;
+  Vector2D animationStartPan;
+  std::chrono::steady_clock::time_point cameraAnimationStarted = std::chrono::steady_clock::now();
+  bool cameraAnimating = false;
   MonitorGeometry geometry;
   struct Placement {
     std::string layer = "grid";
@@ -95,6 +101,7 @@ CFunctionHook* rendererHook = nullptr;
 CFunctionHook* inputHook = nullptr;
 void drawSurfaceHook(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
 void mouseMovedHook(CInputManager*, IPointer::SMotionEvent);
+void updateCamera(Board&);
 void persist();
 bool jsonClientBelongsToBoard(const std::string&, std::string_view, std::string_view, int);
 
@@ -278,17 +285,22 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
     return;
   }
 
+  updateCamera(board->second);
   const auto& placement = board->second.clients.at(identity);
   const auto zoom = boundedZoom(board->second.zoom);
   const auto projected = projectGeometry(board->second, placement.world);
   const auto original = element->m_data;
-  if (zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0) {
-    const auto worldOrigin = Vector2D{placement.world.x, placement.world.y};
-    const auto relative = original.pos - worldOrigin;
-    element->m_data.pos = {projected.x + relative.x * zoom, projected.y + relative.y * zoom};
+  const auto worldOrigin = Vector2D{placement.world.x, placement.world.y};
+  const auto relative = original.pos - worldOrigin;
+  const auto transformedPosition = Vector2D{projected.x + relative.x * zoom, projected.y + relative.y * zoom};
+  const auto transformedSize = Vector2D{original.w * zoom, original.h * zoom};
+  const auto transformed = zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0;
+  if (transformed) {
+    element->m_data.pos = transformedPosition;
     element->m_data.localPos = original.localPos * zoom;
-    element->m_data.w = original.w * zoom;
-    element->m_data.h = original.h * zoom;
+    element->m_data.w = transformedSize.x;
+    element->m_data.h = transformedSize.y;
+    element->m_data.squishOversized = false;
   }
   if (rendererHook != nullptr && rendererHook->m_original != nullptr)
     reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
@@ -494,6 +506,39 @@ bool applyCamera(Board& board, Vector2D pan, float zoom) {
 
 bool applyPan(Board& board, Vector2D pan) {
   return applyCamera(board, pan, board.zoom);
+}
+
+void requestCamera(Board& board, Vector2D targetPan, float targetZoom) {
+  const auto currentPan = board.pan;
+  const auto currentZoom = board.zoom;
+  board.pan = targetPan;
+  board.zoom = boundedZoom(targetZoom);
+  targetPan = boundedPan(board, board.geometry);
+  board.pan = currentPan;
+  board.zoom = currentZoom;
+  board.targetPan = targetPan;
+  board.targetZoom = boundedZoom(targetZoom);
+  board.animationStartPan = currentPan;
+  board.animationStartZoom = currentZoom;
+  board.cameraAnimationStarted = std::chrono::steady_clock::now();
+  board.cameraAnimating = true;
+}
+
+void updateCamera(Board& board) {
+  if (!board.cameraAnimating)
+    return;
+  constexpr auto duration = std::chrono::milliseconds{220};
+  const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()
+                                                                             - board.cameraAnimationStarted);
+  const auto linear = std::clamp(elapsed.count() / static_cast<float>(duration.count()), 0.0F, 1.0F);
+  const auto eased = linear * linear * (3.0F - 2.0F * linear);
+  applyCamera(board,
+              board.animationStartPan + (board.targetPan - board.animationStartPan) * eased,
+              board.animationStartZoom + (board.targetZoom - board.animationStartZoom) * eased);
+  if (linear >= 1.0F)
+    board.cameraAnimating = false;
+  else if (g_pHyprRenderer != nullptr)
+    g_pHyprRenderer->damageBox(board.geometry.x, board.geometry.y, board.geometry.width, board.geometry.height);
 }
 
 int placementFailure(lua_State* state, std::string_view reason) {
@@ -1017,8 +1062,7 @@ int setZoomLua(lua_State* state) {
     return activationFailure(state, "board is not active");
   if (zoom < kMinimumZoom || zoom > 1.0F)
     return activationFailure(state, "zoom must be between 0.25 and 1.0");
-  if (!applyCamera(board->get(), board->get().pan, zoom))
-    return activationFailure(state, "camera geometry dispatch failed");
+  requestCamera(board->get(), board->get().pan, zoom);
   damageBoard(board->get());
   lua_pushboolean(state, true);
   return 1;
@@ -1041,8 +1085,7 @@ int setCameraLua(lua_State* state) {
     return activationFailure(state, "board is not active");
   if (zoom < kMinimumZoom || zoom > 1.0F)
     return activationFailure(state, "zoom must be between 0.25 and 1.0");
-  if (!applyCamera(board->get(), Vector2D{panX, panY}, zoom))
-    return activationFailure(state, "camera geometry dispatch failed");
+  requestCamera(board->get(), Vector2D{panX, panY}, zoom);
   debugLog("camera monitor=" + std::string{monitorValue, monitorLength} + " workspace=" + std::to_string(workspace)
            + " zoom=" + std::to_string(board->get().zoom) + " pan=" + std::to_string(board->get().pan.x) + ","
            + std::to_string(board->get().pan.y));
