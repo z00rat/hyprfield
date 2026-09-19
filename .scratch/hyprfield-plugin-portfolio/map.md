@@ -38,7 +38,7 @@ Standing preferences: preserve independent plugin loading, prefer native Lua-fac
 - [Whiteboard Host Activation](issues/13-whiteboard-workspace-activation.md) — verify monitor/workspace assignment and ordinary-workspace preservation.
 - [Whiteboard Workspace and Normal Mode](issues/14-whiteboard-workspace-and-normal-mode.md) — own board/client identity, lifecycle, persistence, and 1x behavior.
 - [Whiteboard Window Placement](issues/15-whiteboard-window-placement.md) — implement exclusive grid and explicit floating placement.
-- [Whiteboard Camera Rendering](issues/16-whiteboard-camera-rendering.md) — implement bounded transforms and restoration.
+- [Whiteboard Camera Rendering](issues/16-whiteboard-camera-rendering.md) — resolved in commit `309236e`; complete-pass offscreen rendering, signed canvas bounds, monitor-relative damage, bounded management reporting, and fail-closed visibility-hook compatibility are implemented; gesture input remains issue 17.
 - [Whiteboard Management Input](issues/17-whiteboard-management-input.md) — implement managed gestures and activation.
 - [Whiteboard End-to-End Integration](issues/18-whiteboard-end-to-end-integration.md) — verify the complete Whiteboard workflow and failure behavior.
 
