@@ -187,8 +187,10 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
 
 using DrawSurface = void (*)(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
 
-float boundedZoom(float) {
-  return 1.0F;
+constexpr float kMinimumZoom = 0.25F;
+
+float boundedZoom(float zoom) {
+  return std::clamp(zoom, kMinimumZoom, 1.0F);
 }
 
 Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
@@ -436,8 +438,7 @@ void setGeometry(Board& board, Board::Placement& placement, std::string_view) {
            + std::to_string(placement.world.width) + "x" + std::to_string(placement.world.height));
 }
 
-bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
-  const auto& world = placement.world;
+bool dispatchScreenGeometry(std::string_view identity, const Board::Geometry& geometry) {
   const auto address = identity.starts_with("address:") ? std::string{identity} : "address:" + std::string{identity};
   const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "", "j");
   const auto clientValue = jsonStringFieldPosition(clients, "address", identity);
@@ -454,19 +455,24 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
     if (!floating.starts_with("ok"))
       return false;
   }
-  const auto resize = invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(world.width) + ",y="
-                                       + std::to_string(world.height) + ",relative=false,window=\"" + address + "\"})");
+  const auto resize =
+      invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(geometry.width)
+                       + ",y=" + std::to_string(geometry.height) + ",relative=false,window=\"" + address + "\"})");
   if (!resize.starts_with("ok")) {
     debugLog("grid resize failed identity=" + std::string{identity} + " response=" + resize);
     return false;
   }
-  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(world.x) + ",y="
-                                     + std::to_string(world.y) + ",relative=false,window=\"" + address + "\"})");
+  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(geometry.x) + ",y="
+                                     + std::to_string(geometry.y) + ",relative=false,window=\"" + address + "\"})");
   if (!move.starts_with("ok")) {
     debugLog("grid move failed identity=" + std::string{identity} + " response=" + move);
     return false;
   }
   return true;
+}
+
+bool dispatchGeometry(const Board& board, std::string_view identity, const Board::Placement& placement) {
+  return dispatchScreenGeometry(identity, projectGeometry(board, placement.world));
 }
 
 bool dispatchPosition(std::string_view identity, int x, int y) {
@@ -478,27 +484,33 @@ bool dispatchPosition(std::string_view identity, int x, int y) {
   return move.starts_with("ok");
 }
 
-bool applyPan(Board& board, Vector2D pan) {
+bool applyCamera(Board& board, Vector2D pan, float zoom) {
   const auto previousPan = board.pan;
+  const auto previousZoom = board.zoom;
+  board.zoom = boundedZoom(zoom);
   board.pan = pan;
+  board.pan = boundedPan(board, board.geometry);
   std::vector<std::string> moved;
   for (const auto& [identity, placement] : board.clients) {
     if (placement.layer != "grid")
       continue;
     const auto projected = projectGeometry(board, placement.world);
-    if (!dispatchPosition(identity, projected.x, projected.y)) {
+    moved.push_back(identity);
+    if (!dispatchScreenGeometry(identity, projected)) {
       board.pan = previousPan;
+      board.zoom = previousZoom;
       for (const auto& movedIdentity : moved) {
         const auto& movedPlacement = board.clients.at(movedIdentity);
-        dispatchPosition(movedIdentity,
-                         projectGeometry(board, movedPlacement.world).x,
-                         projectGeometry(board, movedPlacement.world).y);
+        dispatchScreenGeometry(movedIdentity, projectGeometry(board, movedPlacement.world));
       }
       return false;
     }
-    moved.push_back(identity);
   }
   return true;
+}
+
+bool applyPan(Board& board, Vector2D pan) {
+  return applyCamera(board, pan, board.zoom);
 }
 
 int placementFailure(lua_State* state, std::string_view reason) {
@@ -742,7 +754,7 @@ int registerClientLua(lua_State* state) {
           record.row = row;
           record.column = column;
           setGeometry(board->get(), record, monitor);
-          if (!dispatchGeometry(identity, record)) {
+          if (!dispatchGeometry(board->get(), identity, record)) {
             board->get().clients.erase(identity);
             return activationFailure(state, "client geometry dispatch failed");
           }
@@ -822,7 +834,7 @@ int configureGridLua(lua_State* state) {
   for (auto& [identity, placement] : board->get().clients)
     if (placement.layer == "grid") {
       setGeometry(board->get(), placement, std::string_view{monitorValue, monitorLength});
-      if (!dispatchGeometry(identity, placement)) {
+      if (!dispatchGeometry(board->get(), identity, placement)) {
         grid = previousGrid;
         board->get().clients = previousPlacements;
         return placementFailure(state, "client geometry dispatch failed");
@@ -875,11 +887,11 @@ int placeGridLua(lua_State* state) {
       target.layer = "grid";
       setGeometry(board->get(), target, monitor);
       setGeometry(board->get(), other, monitor);
-      if (!dispatchGeometry(identity, target) || !dispatchGeometry(otherIdentity, other)) {
+      if (!dispatchGeometry(board->get(), identity, target) || !dispatchGeometry(board->get(), otherIdentity, other)) {
         target = previousTarget;
         other = previousOther;
-        dispatchGeometry(identity, previousTarget);
-        dispatchGeometry(otherIdentity, previousOther);
+        dispatchGeometry(board->get(), identity, previousTarget);
+        dispatchGeometry(board->get(), otherIdentity, previousOther);
         return placementFailure(state, "client geometry dispatch failed");
       }
       lua_pushboolean(state, true);
@@ -901,7 +913,7 @@ int placeGridLua(lua_State* state) {
   target.columnSpan = static_cast<int>(columnSpan);
   recomputeCanvasBounds(board->get());
   setGeometry(board->get(), target, monitor);
-  if (!dispatchGeometry(identity, target)) {
+  if (!dispatchGeometry(board->get(), identity, target)) {
     target = previousTarget;
     return placementFailure(state, "client geometry dispatch failed");
   }
@@ -940,7 +952,7 @@ int setLayerLua(lua_State* state) {
     recomputeCanvasBounds(board->get());
     found->second.layer = "grid";
     setGeometry(board->get(), found->second, std::string_view{monitorValue, monitorLength});
-    if (!dispatchGeometry(identity, found->second)) {
+    if (!dispatchGeometry(board->get(), identity, found->second)) {
       found->second = previousPlacement;
       return placementFailure(state, "client geometry dispatch failed");
     }
@@ -980,7 +992,7 @@ int placeFloatingLua(lua_State* state) {
                              .y = static_cast<int>(y),
                              .width = static_cast<int>(width),
                              .height = static_cast<int>(height)}};
-  if (!dispatchGeometry(identity, found->second)) {
+  if (!dispatchGeometry(board->get(), identity, found->second)) {
     found->second = previousPlacement;
     return placementFailure(state, "client geometry dispatch failed");
   }
@@ -1018,10 +1030,10 @@ int setZoomLua(lua_State* state) {
   const auto board = findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
   if (!board)
     return activationFailure(state, "board is not active");
-  if (zoom != 1.0F)
-    return activationFailure(state, "zoom is disabled while pan-only camera mode is active");
-  board->get().zoom = 1.0F;
-  board->get().pan = boundedPan(board->get(), board->get().geometry);
+  if (zoom < kMinimumZoom || zoom > 1.0F)
+    return activationFailure(state, "zoom must be between 0.25 and 1.0");
+  if (!applyCamera(board->get(), board->get().pan, zoom))
+    return activationFailure(state, "camera geometry dispatch failed");
   damageBoard(board->get());
   lua_pushboolean(state, true);
   return 1;
@@ -1042,12 +1054,9 @@ int setCameraLua(lua_State* state) {
   const auto board = findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
   if (!board)
     return activationFailure(state, "board is not active");
-  if (zoom != 1.0F)
-    return activationFailure(state, "zoom is disabled while pan-only camera mode is active");
-  board->get().zoom = 1.0F;
-  board->get().pan = Vector2D{panX, panY};
-  const auto pan = boundedPan(board->get(), board->get().geometry);
-  if (!applyPan(board->get(), pan))
+  if (zoom < kMinimumZoom || zoom > 1.0F)
+    return activationFailure(state, "zoom must be between 0.25 and 1.0");
+  if (!applyCamera(board->get(), Vector2D{panX, panY}, zoom))
     return activationFailure(state, "camera geometry dispatch failed");
   debugLog("camera monitor=" + std::string{monitorValue, monitorLength} + " workspace=" + std::to_string(workspace)
            + " zoom=" + std::to_string(board->get().zoom) + " pan=" + std::to_string(board->get().pan.x) + ","

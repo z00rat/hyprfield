@@ -24,11 +24,11 @@ placement and pan behavior.
 
 - [x] Phase 1: separate persistent world rectangles from applied screen geometry.
 - [x] Phase 2: add pure projection math for position, size, zoom, and pan.
-- [ ] Phase 3: test projection and minimum-size/viewport bounds offline.
-- [ ] Phase 4: apply projected geometry transactionally: resize, move, verify, rollback.
-- [ ] Phase 5: distribute all clients across deterministic 2D rings around the central grid.
-- [ ] Phase 6: add zoom API and reset behavior while preserving 1x compatibility.
-- [ ] Phase 7: add zoom/pan manual walkthrough and geometry snapshots.
+- [x] Phase 3: test projection and minimum-size/viewport bounds offline.
+- [x] Phase 4: apply projected geometry transactionally: resize, move, verify, rollback.
+- [x] Phase 5: distribute all clients across deterministic 2D positions around the central grid.
+- [x] Phase 6: add zoom API and reset behavior while preserving 1x compatibility.
+- [x] Phase 7: add zoom/pan manual walkthrough and geometry snapshots.
 - [ ] Phase 8: verify restoration and report live-test results.
 
 ## Proposed geometry model

@@ -260,6 +260,36 @@ if test $result -eq 0
 end
 
 if test $result -eq 0
+    echo "Zooming the whiteboard to 0.75x..."
+    echo "Expected: the same windows remain present, their sizes shrink, and more surrounding canvas is visible."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.75, 0, 0) end"
+        echo "Could not set 0.75x zoom."
+        set result 1
+    end
+    snapshot_grid "zoom 0.75x" "$workspace"
+end
+
+if test $result -eq 0
+    sleep 2
+    echo "Zooming the whiteboard to 0.5x..."
+    echo "Expected: the same windows remain present, approximately half-size, with more surrounding windows visible."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.5, 0, 0) end"
+        echo "Could not set 0.5x zoom."
+        set result 1
+    end
+    snapshot_grid "zoom 0.5x" "$workspace"
+end
+
+if test $result -eq 0
+    echo "Restoring 1x geometry before pan checks..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 0) end"
+        echo "Could not restore 1x geometry."
+        set result 1
+    end
+    snapshot_grid "zoom reset" "$workspace"
+end
+
+if test $result -eq 0
     echo "Panning the 1x whiteboard viewport right..."
     echo "Expected: every tested window moves together; sizes and client count stay unchanged."
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -$pan_distance, 0) end"
