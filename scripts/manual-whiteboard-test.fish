@@ -81,6 +81,11 @@ for window in $original_windows
     set -l fields (string split \t -- $window)
     set -a test_addresses $fields[1]
 end
+if test (count $test_addresses) -lt 4
+    echo "At least four non-fullscreen windows are required for the rectangular grid test."
+    exit 1
+end
+set test_addresses $test_addresses[1..4]
 echo "Temporarily testing windows: $test_addresses"
 
 function restore_windows
@@ -198,20 +203,17 @@ if test $result -eq 0
 end
 
 set -l window_count (count $test_addresses)
-set -l grid_rows (math "ceil($window_count / 4)")
-if test "$grid_rows" -lt 1
-    set grid_rows 1
-end
+set -l grid_rows 2
     if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, 4, 2, 2, 'grid') end"
     echo "Could not configure the Whiteboard grid."
     set result 1
 end
 
 if test $result -eq 0
-    set -l grid_rows_for_clients 0 0 0 0 1 1
-    set -l grid_columns_for_clients 0 1 2 3 1 3
-    set -l grid_row_spans 2 1 1 1 1 1
-    set -l grid_column_spans 1 1 1 1 2 1
+    set -l grid_rows_for_clients 0 0 0 1
+    set -l grid_columns_for_clients 0 2 3 2
+    set -l grid_row_spans 2 1 1 1
+    set -l grid_column_spans 2 1 1 2
     set -l index 0
     for address in $test_addresses
         set -l row $grid_rows_for_clients[(math "$index + 1")]
