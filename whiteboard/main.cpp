@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <exception>
@@ -357,8 +358,15 @@ std::optional<int> jsonIntegerField(const std::string& json,
   }
 }
 
-int jsonNumber(const std::string& json, std::string_view field, int fallback) {
-  return jsonIntegerField(json, field).value_or(fallback);
+double jsonNumber(const std::string& json, std::string_view field, double fallback) {
+  const auto value = jsonFieldValue(json, field);
+  if (!value)
+    return fallback;
+  try {
+    return std::stod(json.substr(*value));
+  } catch (const std::exception&) {
+    return fallback;
+  }
 }
 
 MonitorGeometry monitorGeometry(std::string_view monitor) {
@@ -367,10 +375,11 @@ MonitorGeometry monitorGeometry(std::string_view monitor) {
   if (!name || !jsonStringFieldEquals(json, "name", monitor))
     return {};
   const auto object = json.substr(*name, json.find('}', *name) - *name);
-  return {.x = jsonNumber(object, "x", 0),
-          .y = jsonNumber(object, "y", 0),
-          .width = jsonNumber(object, "width", 1920),
-          .height = jsonNumber(object, "height", 1080)};
+  const auto scale = std::max(1.0, jsonNumber(object, "scale", 1.0));
+  return {.x = static_cast<int>(std::lround(jsonNumber(object, "x", 0.0))),
+          .y = static_cast<int>(std::lround(jsonNumber(object, "y", 0.0))),
+          .width = static_cast<int>(std::lround(jsonNumber(object, "width", 1920.0) / scale)),
+          .height = static_cast<int>(std::lround(jsonNumber(object, "height", 1080.0) / scale))};
 }
 
 bool occupies(const Board::Placement& placement, int row, int column) {
