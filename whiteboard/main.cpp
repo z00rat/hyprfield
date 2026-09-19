@@ -188,6 +188,7 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
 using DrawSurface = void (*)(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
 
 constexpr float kMinimumZoom = 0.25F;
+constexpr int kMinimumProjectedDimension = 32;
 
 float boundedZoom(float zoom) {
   return std::clamp(zoom, kMinimumZoom, 1.0F);
@@ -222,8 +223,8 @@ Board::Geometry projectGeometry(const Board& board, const Board::Geometry& world
       Vector2D{board.geometry.x + board.geometry.width / 2.0, board.geometry.y + board.geometry.height / 2.0};
   const auto worldCenter = Vector2D{world.x + world.width / 2.0, world.y + world.height / 2.0};
   const auto screenCenter = monitorCenter + (worldCenter - monitorCenter) * zoom + board.pan;
-  const auto width = static_cast<int>(std::lround(world.width * zoom));
-  const auto height = static_cast<int>(std::lround(world.height * zoom));
+  const auto width = std::max(kMinimumProjectedDimension, static_cast<int>(std::lround(world.width * zoom)));
+  const auto height = std::max(kMinimumProjectedDimension, static_cast<int>(std::lround(world.height * zoom)));
   return {.x = static_cast<int>(std::lround(screenCenter.x - width / 2.0)),
           .y = static_cast<int>(std::lround(screenCenter.y - height / 2.0)),
           .width = width,
@@ -837,6 +838,8 @@ int configureGridLua(lua_State* state) {
       if (!dispatchGeometry(board->get(), identity, placement)) {
         grid = previousGrid;
         board->get().clients = previousPlacements;
+        for (const auto& [previousIdentity, previousPlacement] : previousPlacements)
+          dispatchGeometry(board->get(), previousIdentity, previousPlacement);
         return placementFailure(state, "client geometry dispatch failed");
       }
     }

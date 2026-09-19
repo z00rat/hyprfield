@@ -14,6 +14,7 @@ set -g cleanup_done 0
 set -g result 0
 set -g original_windows
 set -g test_addresses
+set -g ordinary_snapshot ""
 set -l stamp (date +%s)
 
 if not set -q HYPRFIELD_MANUAL_TEST_LOGGED
@@ -172,9 +173,17 @@ end
 
 function snapshot_grid
     set -l snapshot_workspace $argv[2]
+    set -l snapshot (hyprctl -j clients | jq -c --arg workspace "$snapshot_workspace" \
+        '[.[] | select((.workspace.id | tostring) == $workspace) | {address, at, size, floating}]')
     echo "GRID SNAPSHOT: $argv[1]"
-    hyprctl -j clients | jq -c --arg workspace "$snapshot_workspace" \
-        '[.[] | select((.workspace.id | tostring) == $workspace) | {address, at, size, floating}]'
+    echo $snapshot
+    if test "$argv[1]" = "ordinary grid"
+        set -g ordinary_snapshot $snapshot
+    end
+    if test "$argv[1]" = "restored origin"; and test "$snapshot" != "$ordinary_snapshot"
+        echo "ERROR: restored origin geometry differs from ordinary-grid geometry."
+        set -g result 1
+    end
 end
 
 if not test -f "$plugin"
