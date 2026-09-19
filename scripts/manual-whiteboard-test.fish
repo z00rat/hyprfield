@@ -85,7 +85,11 @@ if test (count $test_addresses) -lt 4
     echo "At least four non-fullscreen windows are required for the rectangular grid test."
     exit 1
 end
-echo "Temporarily testing windows: $test_addresses"
+set -l board_addresses $test_addresses[1..4]
+echo "Temporarily testing windows: $board_addresses"
+if test (count $test_addresses) -gt 4
+    echo "Leaving extra windows outside the whiteboard layout: $test_addresses[5..-1]"
+end
 
 function restore_windows
     echo "Restoring original window placement..."
@@ -192,7 +196,7 @@ if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whitebo
 end
 
 if test $result -eq 0
-    for address in $test_addresses
+    for address in $board_addresses
         if not whiteboard_dispatch "function() hl.plugin.whiteboard.registerClient('$monitor', $workspace, '$address', 'floating') end"
             echo "Could not register window $address."
             set result 1
@@ -201,11 +205,9 @@ if test $result -eq 0
     end
 end
 
-set -l window_count (count $test_addresses)
+set -l window_count (count $board_addresses)
 set -l grid_rows 2
-set -l extra_count (math "$window_count - 4")
-set -l extra_columns (math "ceil($extra_count / 2)")
-set -l grid_columns (math "4 + $extra_columns")
+set -l grid_columns 4
 if test $result -eq 0; and not whiteboard_dispatch "function() hl.plugin.whiteboard.configureGrid('$monitor', $workspace, $grid_rows, $grid_columns, 2, 2, 'grid') end"
     echo "Could not configure the Whiteboard grid."
     set result 1
@@ -217,7 +219,7 @@ if test $result -eq 0
     set -l grid_row_spans 2 1 1 1
     set -l grid_column_spans 2 1 1 2
     set -l index 0
-    for address in $test_addresses
+    for address in $board_addresses
         if test $index -lt 4
             set row $grid_rows_for_clients[(math "$index + 1")]
             set column $grid_columns_for_clients[(math "$index + 1")]
