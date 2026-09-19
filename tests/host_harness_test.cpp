@@ -145,12 +145,11 @@ void verify_whiteboard(const std::string& plugin_path) {
   expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));
   expect(!model.invokeLua(
       "whiteboard", "configureGrid", std::vector<std::string>{"DP-1", "42", "0", "4", "10", "20", "grid"}));
-  expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "0.8"}));
-  expect(!model.invokeLua("whiteboard", "normal", std::vector<std::string>{"DP-1", "42"}));
-  expect(model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
-  expect(
-      model.invokeLua("whiteboard", "setCamera", std::vector<std::string>{"DP-1", "42", "0.1", "100000", "-100000"}));
-  expect(model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
+  expect(model.invokeLua("whiteboard", "setZoom", std::vector<std::string>{"DP-1", "42", "1.0"}));
+  expect(model.invokeLua("whiteboard", "normal", std::vector<std::string>{"DP-1", "42"}));
+  expect(!model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
+  expect(model.invokeLua("whiteboard", "setCamera", std::vector<std::string>{"DP-1", "42", "1.0", "100", "-100"}));
+  expect(!model.invokeLua("whiteboard", "management", std::vector<std::string>{"DP-1", "42"}));
   expect(model.invokeLua("whiteboard", "closeClient", "address:one"));
   expect(!model.invokeLua("whiteboard", "clientActive", "address:one"));
   expect(model.invokeLua("whiteboard", "registerClient", std::vector<std::string>{"DP-1", "42", "address:one"}));

@@ -189,12 +189,8 @@ std::optional<std::reference_wrapper<Board>> findBoard(std::string_view monitor,
 
 using DrawSurface = void (*)(Render::IElementRenderer*, WP<CSurfacePassElement>, const CRegion&);
 
-constexpr float kMinimumZoom = 0.5F;
-constexpr float kMaximumZoom = 1.0F;
-constexpr float kManagementZoom = 0.9F;
-
-float boundedZoom(float zoom) {
-  return std::clamp(zoom, kMinimumZoom, kMaximumZoom);
+float boundedZoom(float) {
+  return 1.0F;
 }
 
 Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
@@ -239,15 +235,10 @@ void mouseMovedHook(CInputManager* input, IPointer::SMotionEvent event) {
   if (input != nullptr) {
     const auto cursor = input->getMouseCoordsInternal();
     for (const auto& [_, board] : activeBoards) {
-      if (board.zoom >= kManagementZoom)
-        continue;
       const auto& geometry = board.geometry;
       if (cursor.x < geometry.x || cursor.y < geometry.y || cursor.x >= geometry.x + geometry.width
           || cursor.y >= geometry.y + geometry.height)
         continue;
-      const auto inverseZoom = 1.0 / boundedZoom(board.zoom);
-      event.delta *= inverseZoom;
-      event.unaccel *= inverseZoom;
       break;
     }
   }
@@ -1050,7 +1041,9 @@ int setZoomLua(lua_State* state) {
   const auto board = findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
   if (!board)
     return activationFailure(state, "board is not active");
-  board->get().zoom = boundedZoom(zoom);
+  if (zoom != 1.0F)
+    return activationFailure(state, "zoom is disabled while pan-only camera mode is active");
+  board->get().zoom = 1.0F;
   board->get().pan = boundedPan(board->get(), board->get().geometry);
   damageBoard(board->get());
   lua_pushboolean(state, true);
@@ -1072,7 +1065,9 @@ int setCameraLua(lua_State* state) {
   const auto board = findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
   if (!board)
     return activationFailure(state, "board is not active");
-  board->get().zoom = boundedZoom(zoom);
+  if (zoom != 1.0F)
+    return activationFailure(state, "zoom is disabled while pan-only camera mode is active");
+  board->get().zoom = 1.0F;
   board->get().pan = Vector2D{panX, panY};
   board->get().pan = boundedPan(board->get(), board->get().geometry);
   debugLog("camera monitor=" + std::string{monitorValue, monitorLength} + " workspace=" + std::to_string(workspace)
@@ -1103,7 +1098,7 @@ int managementLua(lua_State* state) {
   const auto board = monitorValue == nullptr || !isWorkspace
                          ? std::optional<std::reference_wrapper<Board>>{}
                          : findBoard(std::string_view{monitorValue, monitorLength}, static_cast<int>(workspace));
-  lua_pushboolean(state, board && board->get().zoom < 0.9F);
+  lua_pushboolean(state, false);
   return 1;
 }
 
