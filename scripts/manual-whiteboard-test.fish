@@ -223,8 +223,8 @@ if test $result -eq 0
             set row_span $grid_row_spans[(math "$index + 1")]
             set column_span $grid_column_spans[(math "$index + 1")]
         else
-            set row (math "($index - 4) % 2")
-            set column (math "4 + floor(($index - 4) / 2)")
+            set row (math "-1 + (($index - 4) % 2)")
+            set column (math "-1 + floor(($index - 4) / 2)")
             set row_span 1
             set column_span 1
         end
@@ -242,20 +242,45 @@ if test $result -eq 0
     echo "SUCCESS: Whiteboard placed all active windows."
     echo "Holding the ordinary grid for 5 seconds..."
     sleep 5
-    echo "Entering bounded camera management at 0.8x (zoom-only test)..."
-    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 0.8, 0, 0) end"
-        echo "Could not enter camera management mode."
+    echo "Panning the 1x whiteboard viewport right..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 350, 0) end"
+        echo "Could not pan right."
         set result 1
     end
 end
 
 if test $result -eq 0
-    echo "Inspect the transformed layout for 6 seconds..."
+    sleep 2
+    echo "Panning the 1x whiteboard viewport left..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, -350, 0) end"
+        echo "Could not pan left."
+        set result 1
+    end
+end
+
+if test $result -eq 0
+    sleep 2
+    echo "Panning the 1x whiteboard viewport up and down..."
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 350) end"
+        echo "Could not pan up."
+        set result 1
+    end
+end
+
+if test $result -eq 0
+    sleep 2
+    if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, -350) end"
+        echo "Could not pan down."
+        set result 1
+    end
+end
+
+if test $result -eq 0
+    echo "Restoring the ordinary viewport..."
     echo
-    sleep 6
-    echo "Restoring ordinary 1x presentation..."
+    sleep 2
     if not whiteboard_dispatch "function() hl.plugin.whiteboard.setCamera('$monitor', $workspace, 1.0, 0, 0) end"
-        echo "Could not restore ordinary camera presentation."
+        echo "Could not restore ordinary viewport."
         set result 1
     end
     sleep 2

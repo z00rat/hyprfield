@@ -80,7 +80,10 @@ struct Board {
   struct Grid {
     int rows = 2;
     int columns = 4;
-    int canvasColumns = 4;
+    int canvasMinRow = 0;
+    int canvasMaxRow = 2;
+    int canvasMinColumn = 0;
+    int canvasMaxColumn = 4;
     int gap = 16;
     int margin = 32;
     std::string openingLayer = "grid";
@@ -198,13 +201,20 @@ Vector2D boundedPan(const Board& board, const MonitorGeometry& geometry) {
   const auto zoom = boundedZoom(board.zoom);
   const auto contentWidth = geometry.width - board.grid.margin * 2 - board.grid.gap * (board.grid.columns - 1);
   const auto columnEdge = [contentWidth, &board](int column) {
-    return column * contentWidth / board.grid.columns + column * board.grid.gap;
+    return std::floor(column * contentWidth / static_cast<double>(board.grid.columns)) + column * board.grid.gap;
   };
-  const auto canvasWidth = board.grid.margin * 2 + columnEdge(board.grid.canvasColumns) - board.grid.gap;
+  const auto contentHeight = geometry.height - board.grid.margin * 2 - board.grid.gap * (board.grid.rows - 1);
+  const auto rowEdge = [contentHeight, &board](int row) {
+    return std::floor(row * contentHeight / static_cast<double>(board.grid.rows)) + row * board.grid.gap;
+  };
+  const auto canvasLeft = board.grid.margin + columnEdge(board.grid.canvasMinColumn);
+  const auto canvasRight = board.grid.margin + columnEdge(board.grid.canvasMaxColumn) - board.grid.gap;
+  const auto canvasTop = board.grid.margin + rowEdge(board.grid.canvasMinRow);
+  const auto canvasBottom = board.grid.margin + rowEdge(board.grid.canvasMaxRow) - board.grid.gap;
   const auto center = Vector2D{geometry.width / 2.0, geometry.height / 2.0};
-  const auto minimum = Vector2D{-center.x * (1.0F - zoom), -center.y * (1.0F - zoom)};
-  const auto maximum = Vector2D{geometry.width - (center.x + (canvasWidth - center.x) * zoom),
-                                geometry.height - (center.y + (geometry.height - center.y) * zoom)};
+  const auto minimum = Vector2D{geometry.width - (center.x + (canvasRight - center.x) * zoom),
+                                geometry.height - (center.y + (canvasBottom - center.y) * zoom)};
+  const auto maximum = Vector2D{-center.x - (canvasLeft - center.x) * zoom, -center.y - (canvasTop - center.y) * zoom};
   return {std::clamp(board.pan.x, std::min(maximum.x, minimum.x), std::max(maximum.x, minimum.x)),
           std::clamp(board.pan.y, std::min(maximum.y, minimum.y), std::max(maximum.y, minimum.y))};
 }
@@ -272,7 +282,7 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
 
   // Preserve Hyprland's ordinary surface path exactly at 1x. The explicit
   // texture pass is only needed while the camera is actually transformed.
-  if (boundedZoom(board->second.zoom) == 1.0F) {
+  if (boundedZoom(board->second.zoom) == 1.0F && board->second.pan.x == 0.0 && board->second.pan.y == 0.0) {
     if (rendererHook != nullptr && rendererHook->m_original != nullptr)
       reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
     return;
@@ -428,15 +438,30 @@ bool freeSlots(const Board& board, std::string_view except, int row, int column,
   return true;
 }
 
+void recomputeCanvasBounds(Board& board) {
+  board.grid.canvasMinRow = 0;
+  board.grid.canvasMaxRow = board.grid.rows;
+  board.grid.canvasMinColumn = 0;
+  board.grid.canvasMaxColumn = board.grid.columns;
+  for (const auto& [_, placement] : board.clients) {
+    if (placement.layer != "grid")
+      continue;
+    board.grid.canvasMinRow = std::min(board.grid.canvasMinRow, placement.row);
+    board.grid.canvasMaxRow = std::max(board.grid.canvasMaxRow, placement.row + placement.rowSpan);
+    board.grid.canvasMinColumn = std::min(board.grid.canvasMinColumn, placement.column);
+    board.grid.canvasMaxColumn = std::max(board.grid.canvasMaxColumn, placement.column + placement.columnSpan);
+  }
+}
+
 void setGeometry(Board& board, Board::Placement& placement, std::string_view) {
   const auto& geometry = board.geometry;
   const auto contentWidth = geometry.width - board.grid.margin * 2 - board.grid.gap * (board.grid.columns - 1);
   const auto contentHeight = geometry.height - board.grid.margin * 2 - board.grid.gap * (board.grid.rows - 1);
   const auto columnEdge = [contentWidth, &board](int column) {
-    return column * contentWidth / board.grid.columns + column * board.grid.gap;
+    return std::floor(column * contentWidth / static_cast<double>(board.grid.columns)) + column * board.grid.gap;
   };
   const auto rowEdge = [contentHeight, &board](int row) {
-    return row * contentHeight / board.grid.rows + row * board.grid.gap;
+    return std::floor(row * contentHeight / static_cast<double>(board.grid.rows)) + row * board.grid.gap;
   };
   const auto left = columnEdge(placement.column);
   const auto right = columnEdge(placement.column + placement.columnSpan) - board.grid.gap;
@@ -811,18 +836,17 @@ int configureGridLua(lua_State* state) {
       || margin * 2 + gap * (rows - 1) >= monitorGeometry(monitorValue).height)
     return placementFailure(state, "grid configuration does not fit monitor");
   for (const auto& [_, placement] : board->get().clients)
-    if (placement.layer == "grid"
-        && (placement.row + placement.rowSpan > rows || placement.column + placement.columnSpan > columns))
+    if (placement.layer == "grid" && placement.row + placement.rowSpan > rows)
       return placementFailure(state, "grid configuration would invalidate placement");
   auto& grid = board->get().grid;
   const auto previousGrid = grid;
   const auto previousPlacements = board->get().clients;
   grid = {.rows = static_cast<int>(rows),
           .columns = static_cast<int>(columns),
-          .canvasColumns = static_cast<int>(columns),
           .gap = static_cast<int>(gap),
           .margin = static_cast<int>(margin),
           .openingLayer = layer};
+  recomputeCanvasBounds(board->get());
   for (auto& [identity, placement] : board->get().clients)
     if (placement.layer == "grid") {
       setGeometry(board->get(), placement, std::string_view{monitorValue, monitorLength});
@@ -852,8 +876,7 @@ int placeGridLua(lua_State* state) {
   int columnSpanOk = 0;
   const auto columnSpan = lua_tointegerx(state, 7, &columnSpanOk);
   if (monitorValue == nullptr || monitorLength == 0 || !workspaceOk || workspace <= 0 || identityValue == nullptr
-      || identityLength == 0 || !rowOk || !columnOk || !rowSpanOk || !columnSpanOk || row < 0 || column < 0
-      || rowSpan <= 0 || columnSpan <= 0)
+      || identityLength == 0 || !rowOk || !columnOk || !rowSpanOk || !columnSpanOk || rowSpan <= 0 || columnSpan <= 0)
     return placementFailure(state, "invalid grid placement");
   const std::string monitor{monitorValue, monitorLength};
   const std::string identity{identityValue, identityLength};
@@ -906,7 +929,7 @@ int placeGridLua(lua_State* state) {
   target.column = static_cast<int>(column);
   target.rowSpan = static_cast<int>(rowSpan);
   target.columnSpan = static_cast<int>(columnSpan);
-  board->get().grid.canvasColumns = std::max(board->get().grid.canvasColumns, target.column + target.columnSpan);
+  recomputeCanvasBounds(board->get());
   setGeometry(board->get(), target, monitor);
   if (!dispatchGeometry(identity, target)) {
     target = previousTarget;
@@ -946,8 +969,7 @@ int setLayerLua(lua_State* state) {
       return placementFailure(state, "grid placement is occupied");
     if (found->second.row + found->second.rowSpan > board->get().grid.rows)
       return placementFailure(state, "grid placement is out of bounds");
-    board->get().grid.canvasColumns =
-        std::max(board->get().grid.canvasColumns, found->second.column + found->second.columnSpan);
+    recomputeCanvasBounds(board->get());
     found->second.layer = "grid";
     setGeometry(board->get(), found->second, std::string_view{monitorValue, monitorLength});
     if (!dispatchGeometry(identity, found->second)) {
@@ -1141,8 +1163,7 @@ void restore() {
               placement.columnSpan = read();
           }
           board->second.clients.emplace(identity, placement);
-          board->second.grid.canvasColumns =
-              std::max(board->second.grid.canvasColumns, placement.column + placement.columnSpan);
+          recomputeCanvasBounds(board->second);
           if (placement.layer == "grid")
             setGeometry(board->second, board->second.clients.at(identity), board->second.monitor);
         }
@@ -1170,7 +1191,6 @@ void restore() {
               && std::stoi(fields[3]) >= 0 && (fields[4] == "grid" || fields[4] == "floating"))
             board->second.grid = {.rows = std::stoi(fields[0]),
                                   .columns = std::stoi(fields[1]),
-                                  .canvasColumns = std::stoi(fields[1]),
                                   .gap = std::stoi(fields[2]),
                                   .margin = std::stoi(fields[3]),
                                   .openingLayer = fields[4]};
