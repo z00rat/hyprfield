@@ -53,6 +53,7 @@ constexpr std::string_view kInputMethod = "onMouseMoved";
 HANDLE pluginHandle = nullptr;
 std::vector<CFunctionHook*> hooks;
 std::vector<CHyprSignalListener> lifecycleListeners;
+std::atomic_uint64_t transformedDebugRenders = 0;
 
 struct Board {
   struct Geometry {
@@ -295,6 +296,17 @@ void drawSurfaceHook(Render::IElementRenderer* renderer, WP<CSurfacePassElement>
   const auto transformedSize = Vector2D{original.w * zoom, original.h * zoom};
   const auto transformed = zoom != 1.0F || board->second.pan.x != 0.0 || board->second.pan.y != 0.0;
   if (transformed) {
+    const auto debugRender = ++transformedDebugRenders;
+    if (debugRender <= 40 || debugRender % 300 == 0)
+      debugLog("render transform n=" + std::to_string(debugRender) + " identity=" + identity
+               + " monitor=" + monitor->m_name + " monitorPos=" + std::to_string(monitor->m_position.x) + ","
+               + std::to_string(monitor->m_position.y) + " monitorSize=" + std::to_string(monitor->m_size.x) + "x"
+               + std::to_string(monitor->m_size.y) + " scale=" + std::to_string(monitor->m_scale)
+               + " cameraZoom=" + std::to_string(zoom) + " cameraPan=" + std::to_string(board->second.pan.x) + ","
+               + std::to_string(board->second.pan.y) + " source=" + std::to_string(original.pos.x) + ","
+               + std::to_string(original.pos.y) + " " + std::to_string(original.w) + "x" + std::to_string(original.h)
+               + " destination=" + std::to_string(transformedPosition.x) + "," + std::to_string(transformedPosition.y)
+               + " " + std::to_string(transformedSize.x) + "x" + std::to_string(transformedSize.y));
     element->m_data.alpha = 0.0F;
     if (rendererHook != nullptr && rendererHook->m_original != nullptr)
       reinterpret_cast<DrawSurface>(rendererHook->m_original)(renderer, weakElement, damage);
@@ -525,6 +537,7 @@ bool applyPan(Board& board, Vector2D pan) {
 }
 
 void requestCamera(Board& board, Vector2D targetPan, float targetZoom) {
+  transformedDebugRenders = 0;
   const auto currentPan = board.pan;
   const auto currentZoom = board.zoom;
   board.pan = targetPan;
