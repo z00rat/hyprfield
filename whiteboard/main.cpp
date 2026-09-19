@@ -98,10 +98,6 @@ bool jsonClientBelongsToBoard(const std::string&, std::string_view, std::string_
 
 std::string invokeDispatcher(std::string_view expression);
 
-std::string invokeLegacyDispatcher(std::string_view dispatcher, std::string_view arguments) {
-  return HyprlandAPI::invokeHyprctlCommand("dispatch", std::string{dispatcher} + " " + std::string{arguments});
-}
-
 std::filesystem::path statePath() {
   const char* stateHome = std::getenv("XDG_STATE_HOME");
   const auto root = stateHome == nullptr || std::string_view{stateHome}.empty()
@@ -385,6 +381,22 @@ double jsonNumber(const std::string& json, std::string_view field, double fallba
   }
 }
 
+std::optional<Vector2D> jsonVectorField(const std::string& json, std::string_view field) {
+  const auto value = jsonFieldValue(json, field);
+  if (!value || *value >= json.size() || json[*value] != '[')
+    return std::nullopt;
+  const auto comma = json.find(',', *value + 1);
+  const auto end = json.find(']', comma == std::string::npos ? *value + 1 : comma + 1);
+  if (comma == std::string::npos || end == std::string::npos)
+    return std::nullopt;
+  try {
+    return Vector2D{std::stod(json.substr(*value + 1, comma - *value - 1)),
+                    std::stod(json.substr(comma + 1, end - comma - 1))};
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+}
+
 MonitorGeometry monitorGeometry(std::string_view monitor) {
   if (State::monitorState() != nullptr) {
     for (const auto& candidate : State::monitorState()->monitors()) {
@@ -490,13 +502,16 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
     if (!floating.starts_with("ok"))
       return false;
   }
-  const auto move = invokeLegacyDispatcher(
-      "movewindowpixel", "exact " + std::to_string(placement.x) + " " + std::to_string(placement.y) + "," + address);
+  const auto currentPosition = jsonVectorField(object, "at").value_or(Vector2D{});
+  const auto currentSize = jsonVectorField(object, "size").value_or(Vector2D{});
+  const auto moveDelta = Vector2D{placement.x - currentPosition.x, placement.y - currentPosition.y};
+  const auto resizeDelta = Vector2D{placement.width - currentSize.x, placement.height - currentSize.y};
+  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(moveDelta.x) + ",y="
+                                     + std::to_string(moveDelta.y) + ",relative=true,window=\"" + address + "\"})");
   if (!move.starts_with("ok"))
     return false;
-  const auto resize = invokeLegacyDispatcher(
-      "resizewindowpixel",
-      "exact " + std::to_string(placement.width) + " " + std::to_string(placement.height) + "," + address);
+  const auto resize = invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(resizeDelta.x) + ",y="
+                                       + std::to_string(resizeDelta.y) + ",relative=true,window=\"" + address + "\"})");
   if (!resize.starts_with("ok"))
     debugLog("grid resize failed identity=" + std::string{identity} + " response=" + resize);
   return resize.starts_with("ok");
