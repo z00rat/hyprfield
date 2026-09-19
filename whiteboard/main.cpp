@@ -54,6 +54,12 @@ std::vector<CFunctionHook*> hooks;
 std::vector<CHyprSignalListener> lifecycleListeners;
 
 struct Board {
+  struct Geometry {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+  };
   std::string monitor;
   int workspace;
   float zoom = 1.0F;
@@ -65,10 +71,9 @@ struct Board {
     int column = 0;
     int rowSpan = 1;
     int columnSpan = 1;
-    int x = 0;
-    int y = 0;
-    int width = 0;
-    int height = 0;
+    // Stable whiteboard coordinates. Camera operations derive temporary
+    // compositor geometry from this rectangle and never rewrite it.
+    Geometry world;
   };
   struct Grid {
     int rows = 2;
@@ -403,21 +408,22 @@ void setGeometry(Board& board, Board::Placement& placement, std::string_view) {
   const auto right = columnEdge(placement.column + placement.columnSpan) - board.grid.gap;
   const auto top = rowEdge(placement.row);
   const auto bottom = rowEdge(placement.row + placement.rowSpan) - board.grid.gap;
-  placement.x = geometry.x + board.grid.margin + left;
-  placement.y = geometry.y + board.grid.margin + top;
-  placement.width = right - left;
-  placement.height = bottom - top;
+  placement.world.x = geometry.x + board.grid.margin + left;
+  placement.world.y = geometry.y + board.grid.margin + top;
+  placement.world.width = right - left;
+  placement.world.height = bottom - top;
   debugLog("grid monitorBox=" + std::to_string(geometry.x) + "," + std::to_string(geometry.y) + " "
            + std::to_string(geometry.width) + "x" + std::to_string(geometry.height)
            + " cells=" + std::to_string(board.grid.rows) + "x" + std::to_string(board.grid.columns)
            + " gap=" + std::to_string(board.grid.gap) + " margin=" + std::to_string(board.grid.margin)
            + " placement=" + std::to_string(placement.row) + "," + std::to_string(placement.column) + "+"
            + std::to_string(placement.rowSpan) + "x" + std::to_string(placement.columnSpan)
-           + " box=" + std::to_string(placement.x) + "," + std::to_string(placement.y) + " "
-           + std::to_string(placement.width) + "x" + std::to_string(placement.height));
+           + " box=" + std::to_string(placement.world.x) + "," + std::to_string(placement.world.y) + " "
+           + std::to_string(placement.world.width) + "x" + std::to_string(placement.world.height));
 }
 
 bool dispatchGeometry(std::string_view identity, const Board::Placement& placement) {
+  const auto& world = placement.world;
   const auto address = identity.starts_with("address:") ? std::string{identity} : "address:" + std::string{identity};
   const auto clients = HyprlandAPI::invokeHyprctlCommand("clients", "", "j");
   const auto clientValue = jsonStringFieldPosition(clients, "address", identity);
@@ -434,15 +440,14 @@ bool dispatchGeometry(std::string_view identity, const Board::Placement& placeme
     if (!floating.starts_with("ok"))
       return false;
   }
-  const auto resize =
-      invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(placement.width)
-                       + ",y=" + std::to_string(placement.height) + ",relative=false,window=\"" + address + "\"})");
+  const auto resize = invokeDispatcher("hl.dsp.window.resize({x=" + std::to_string(world.width) + ",y="
+                                       + std::to_string(world.height) + ",relative=false,window=\"" + address + "\"})");
   if (!resize.starts_with("ok")) {
     debugLog("grid resize failed identity=" + std::string{identity} + " response=" + resize);
     return false;
   }
-  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(placement.x) + ",y="
-                                     + std::to_string(placement.y) + ",relative=false,window=\"" + address + "\"})");
+  const auto move = invokeDispatcher("hl.dsp.window.move({x=" + std::to_string(world.x) + ",y="
+                                     + std::to_string(world.y) + ",relative=false,window=\"" + address + "\"})");
   if (!move.starts_with("ok")) {
     debugLog("grid move failed identity=" + std::string{identity} + " response=" + move);
     return false;
@@ -466,15 +471,15 @@ bool applyPan(Board& board, Vector2D pan) {
   for (const auto& [identity, placement] : board.clients) {
     if (placement.layer != "grid")
       continue;
-    const auto position = Vector2D{placement.x + board.pan.x, placement.y + board.pan.y};
+    const auto position = Vector2D{placement.world.x + board.pan.x, placement.world.y + board.pan.y};
     if (!dispatchPosition(
             identity, static_cast<int>(std::lround(position.x)), static_cast<int>(std::lround(position.y)))) {
       board.pan = previousPan;
       for (const auto& [movedIdentity, _] : moved) {
         const auto& movedPlacement = board.clients.at(movedIdentity);
         dispatchPosition(movedIdentity,
-                         static_cast<int>(std::lround(movedPlacement.x + previousPan.x)),
-                         static_cast<int>(std::lround(movedPlacement.y + previousPan.y)));
+                         static_cast<int>(std::lround(movedPlacement.world.x + previousPan.x)),
+                         static_cast<int>(std::lround(movedPlacement.world.y + previousPan.y)));
       }
       return false;
     }
@@ -958,10 +963,10 @@ int placeFloatingLua(lua_State* state) {
     return placementFailure(state, "client identity was not registered");
   const auto previousPlacement = found->second;
   found->second = {.layer = "floating",
-                   .x = static_cast<int>(x),
-                   .y = static_cast<int>(y),
-                   .width = static_cast<int>(width),
-                   .height = static_cast<int>(height)};
+                   .world = {.x = static_cast<int>(x),
+                             .y = static_cast<int>(y),
+                             .width = static_cast<int>(width),
+                             .height = static_cast<int>(height)}};
   if (!dispatchGeometry(identity, found->second)) {
     found->second = previousPlacement;
     return placementFailure(state, "client geometry dispatch failed");

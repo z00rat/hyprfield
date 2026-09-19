@@ -22,7 +22,7 @@ placement and pan behavior.
 
 ## Todo
 
-- [ ] Phase 1: separate persistent world rectangles from applied screen geometry.
+- [x] Phase 1: separate persistent world rectangles from applied screen geometry.
 - [ ] Phase 2: add pure projection math for position, size, zoom, and pan.
 - [ ] Phase 3: test projection and minimum-size/viewport bounds offline.
 - [ ] Phase 4: apply projected geometry transactionally: resize, move, verify, rollback.
